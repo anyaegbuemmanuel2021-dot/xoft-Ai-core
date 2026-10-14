@@ -4,3 +4,4 @@ public/generated/
 .env
 *.log
 .env
+env.env
