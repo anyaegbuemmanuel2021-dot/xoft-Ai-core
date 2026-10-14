@@ -1,15 +1,3 @@
-// api.js — single place the rest of the app talks to the XOFT backend through.
-//
-// Offline behavior (this is the "still use it offline" part):
-//  - GET requests: on success, the response is cached (localStorage). If the
-//    network is down or the request fails, the last cached response is
-//    returned instead, tagged {__stale: true} so views can show "offline —
-//    showing cached data" instead of silently pretending it's live.
-//  - Mutating requests (POST/PUT/PATCH/DELETE): if offline, the request is
-//    queued (localStorage) instead of thrown away, and replayed in order the
-//    moment the browser fires an 'online' event (see flushQueue()).
-
-```js
 // api.js — single place the rest of the app talks to the XOFT backend.
 //
 // Features:
@@ -74,7 +62,6 @@ function apiKey() {
   }
 }
 
-// Prevent multiple simultaneous API-key prompts.
 let keyPrompt = null;
 
 function obtainKey(staleKey) {
@@ -96,9 +83,7 @@ function obtainKey(staleKey) {
         }
 
         const trimmed = entered.trim();
-
         localStorage.setItem('xoft_api_key', trimmed);
-
         return trimmed;
       })
       .finally(() => {
@@ -113,24 +98,16 @@ async function rawFetch(url, opts) {
   const headers = { ...(opts.headers || {}) };
   const key = apiKey();
 
-  if (key) {
-    headers['X-API-Key'] = key;
-  }
+  if (key) headers['X-API-Key'] = key;
 
-  let res = await fetch(url, {
-    ...opts,
-    headers,
-  });
+  let res = await fetch(url, { ...opts, headers });
 
   if (res.status === 401) {
     const entered = await obtainKey(key);
 
     res = await fetch(url, {
       ...opts,
-      headers: {
-        ...headers,
-        'X-API-Key': entered,
-      },
+      headers: { ...headers, 'X-API-Key': entered },
     });
 
     if (res.status === 401) {
@@ -142,135 +119,89 @@ async function rawFetch(url, opts) {
   return res;
 }
 
-/**
- * GET requests:
- * - Cache successful responses.
- * - Return cached responses when offline or a request fails.
- * - Mark cached fallback data with __stale: true.
- */
+/** GET with cache-on-success / cache-fallback-on-failure. */
 export async function apiGet(path) {
   const url = path;
 
   if (!navigator.onLine) {
     const cached = getCached(url);
-
-    if (cached) {
-      return { ...cached, __stale: true };
-    }
-
+    if (cached) return { ...cached, __stale: true };
     throw new Error('Offline and nothing cached yet for ' + path);
   }
 
   try {
-    const res = await rawFetch(url, {
-      method: 'GET',
-    });
-
-    if (!res.ok) {
-      throw new Error(`${res.status} ${await res.text()}`);
-    }
+    const res = await rawFetch(url, { method: 'GET' });
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
 
     const data = await res.json();
-
     setCached(url, data);
-
     return data;
   } catch (err) {
     const cached = getCached(url);
-
-    if (cached) {
-      return { ...cached, __stale: true };
-    }
-
+    if (cached) return { ...cached, __stale: true };
     throw err;
   }
 }
 
 /**
- * Retry only the specific 503 response returned by Blitz when
- * the app has just awakened. Other HTTP errors are not retried.
+ * Retry once only when Blitz returns its known app-wakeup response.
+ * Other 503 responses are passed through unchanged.
  */
 async function retryBlitzWakeup(path, opts) {
-  let res = await rawFetch(path, opts);
+  const first = await rawFetch(path, opts);
 
-  if (res.status !== 503) {
-    return res;
-  }
+  if (first.status !== 503) return first;
 
   let wake = null;
-
   try {
-    wake = await res.clone().json();
+    wake = await first.clone().json();
   } catch {
-    // Not a JSON wake-up response.
+    return first;
   }
 
-  const isBlitzWakeup =
-    wake?.status === 'ready' &&
-    wake?.message === 'The app is awake now. Try again.';
-
-  if (!isBlitzWakeup) {
-    return res;
+  if (
+    wake?.status !== 'ready' ||
+    wake?.message !== 'The app is awake now. Try again.'
+  ) {
+    return first;
   }
 
-  // Give the host a moment to finish waking up.
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Retry exactly once. Do not loop indefinitely.
+  await new Promise(resolve => setTimeout(resolve, 1500));
   return rawFetch(path, opts);
 }
 
-/**
- * Mutating requests:
- * - Queue immediately when the browser is offline.
- * - Retry Blitz's explicit wake-up response once.
- * - Queue only network-level TypeErrors.
- * - Throw ordinary HTTP errors to the caller.
- */
+/** Mutating request with offline queue and one Blitz wake-up retry. */
 export async function apiSend(method, path, body) {
   if (!navigator.onLine) {
     queueRequest(method, path, body);
-
     events.dispatchEvent(
-      new CustomEvent('queued', {
-        detail: { method, path },
-      })
+      new CustomEvent('queued', { detail: { method, path } })
     );
-
     return { __queued: true };
   }
 
   const opts = {
     method,
-    headers:
-      body !== undefined
-        ? { 'Content-Type': 'application/json' }
-        : {},
+    headers: body !== undefined
+      ? { 'Content-Type': 'application/json' }
+      : {},
     body: body !== undefined ? JSON.stringify(body) : undefined,
   };
 
   try {
     const res = await retryBlitzWakeup(path, opts);
 
-    if (!res.ok) {
-      throw new Error(`${res.status} ${await res.text()}`);
-    }
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
 
     const text = await res.text();
-
     return text ? JSON.parse(text) : {};
   } catch (err) {
-    // TypeError normally indicates a network-level fetch failure.
-    // Do not queue HTTP errors such as 401, 403, 429 or 503.
+    // Queue only network-level failures, not HTTP errors.
     if (err instanceof TypeError) {
       queueRequest(method, path, body);
-
       events.dispatchEvent(
-        new CustomEvent('queued', {
-          detail: { method, path },
-        })
+        new CustomEvent('queued', { detail: { method, path } })
       );
-
       return { __queued: true };
     }
 
@@ -280,27 +211,14 @@ export async function apiSend(method, path, body) {
 
 function queueRequest(method, path, body) {
   const queue = getQueue();
-
-  queue.push({
-    method,
-    path,
-    body,
-    ts: Date.now(),
-  });
-
+  queue.push({ method, path, body, ts: Date.now() });
   setQueue(queue);
 }
 
-/**
- * Replay queued requests in order.
- * Failed requests remain queued for a later attempt.
- */
+/** Replay queued requests in order; keep unsuccessful requests for retry. */
 export async function flushQueue() {
   const queue = getQueue();
-
-  if (!queue.length) {
-    return;
-  }
+  if (!queue.length) return;
 
   const remaining = [];
 
@@ -308,31 +226,21 @@ export async function flushQueue() {
     try {
       const opts = {
         method: item.method,
-        headers:
-          item.body !== undefined
-            ? { 'Content-Type': 'application/json' }
-            : {},
-        body:
-          item.body !== undefined
-            ? JSON.stringify(item.body)
-            : undefined,
+        headers: item.body !== undefined
+          ? { 'Content-Type': 'application/json' }
+          : {},
+        body: item.body !== undefined ? JSON.stringify(item.body) : undefined,
       };
 
       const res = await retryBlitzWakeup(item.path, opts);
-
-      if (!res.ok) {
-        remaining.push(item);
-      }
+      if (!res.ok) remaining.push(item);
     } catch {
       remaining.push(item);
-
-      // Stop if the connection or authentication fails.
       break;
     }
   }
 
   setQueue(remaining);
-
   events.dispatchEvent(
     new CustomEvent('queue-flushed', {
       detail: { remaining: remaining.length },
@@ -342,7 +250,6 @@ export async function flushQueue() {
 
 window.addEventListener('online', () => {
   flushQueue();
-
   events.dispatchEvent(new Event('online'));
 });
 
@@ -357,4 +264,3 @@ export const api = {
   put: (path, body) => apiSend('PUT', path, body),
   del: path => apiSend('DELETE', path),
 };
-```
