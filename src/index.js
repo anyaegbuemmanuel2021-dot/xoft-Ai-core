@@ -319,7 +319,7 @@ app.post('/webhooks/twilio/status', express.urlencoded({ extended: false }), (re
 app.use(helmet());
 app.use('/api', rateLimit({
   windowMs: 60 * 1000,
-  limit: 120, // generous for normal use, still a real ceiling against abuse
+  limit: Number(process.env.Rate_LIMIT_PER_MIN) || 120, // generous for normal use, still a real ceiling against abuse
   standardHeaders: true,
   legacyHeaders: false,
 }));
