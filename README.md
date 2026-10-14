@@ -863,3 +863,5 @@ Xoft does not require any AI provider or API key to start. FreeLLMAPI and LiteLL
 - **`npm install` fails / `Cannot find package 'dotenv'`** — dependencies are not installed. Run `npm install` in the project folder with internet access (use `npm install --registry https://registry.npmjs.org` if a mirror blocks it).
 - **XOFT calls everyone the same thing** — all web users share one profile unless you send `userId` in `/api/chat` or set it via `POST /api/address`.
 "# xoft-Ai-core" 
+"# xoft-ai-core-2" 
+"# xoft-ai-core-2" 
