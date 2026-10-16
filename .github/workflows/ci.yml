@@ -10,6 +10,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: node --check src/index.js
+      - run: node --check src/integrations/WhatsAppInboxStore.js
       - run: node --check public/js/dashboard/CommandInput.js
       - run: node --check public/js/views/chat.js
       - run: node --check public/js/views/integrations.js
