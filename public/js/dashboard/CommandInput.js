@@ -3,6 +3,46 @@ import { esc, toast } from '../dom.js';
 import { QUICK_COMMANDS } from './logic.js';
 
 const SESSION_KEY = 'xoft_chat_session'; // same session the Chat view uses
+
+function friendlyProviderError(rawMessage) {
+  const raw = String(rawMessage ?? '');
+  let body = null;
+  try {
+    body = JSON.parse(raw.replace(/^\\s*\\d{3}\\s+/, ''));
+  } catch { /* This was not a structured API error. */ }
+
+  if (body?.error !== 'AI_PROVIDERS_FAILED' && body?.error !== 'NO_AI_PROVIDER_AVAILABLE') {
+    return `Request failed: ${raw}`;
+  }
+
+  if (body.error === 'NO_AI_PROVIDER_AVAILABLE') {
+    return 'XOFT could not find a usable AI provider. Open Settings → AI providers and configure or test at least one provider.';
+  }
+
+  const advice = (body.attempts ?? []).map((attempt) => {
+    const name = ({ openai: 'OpenAI', gemini: 'Gemini', claude: 'Claude', grok: 'Grok', ollama: 'Ollama', experiential: 'Experiential Labs', freellmapi: 'FreeLLMAPI', litellm: 'LiteLLM' })[attempt.provider] ?? attempt.provider;
+    switch (attempt.errorType) {
+      case 'rate_limit':
+        return `${name} hit a rate, usage, or quota limit. Check that provider's API usage, billing/credits, and rate limits.`;
+      case 'auth':
+        return `${name} rejected its credentials. Check the API key in your deployment environment.`;
+      case 'invalid_request':
+        return `${name} rejected the configured model or request. Check the model name in Settings or deployment variables.`;
+      case 'timeout':
+      case 'unavailable':
+      case 'server_error':
+        return `${name} is temporarily unreachable. Try again shortly.`;
+      default:
+        return `${name} failed. Check its API key and model configuration.`;
+    }
+  });
+
+  return [
+    'XOFT is running, but its configured AI providers could not answer.',
+    ...advice,
+    'Fix the provider issue, then retry. You can check Settings → AI providers for configuration and connection tests.'
+  ].join(' ');
+}
 function sessionId() {
   let id = localStorage.getItem(SESSION_KEY);
   if (!id) { id = crypto.randomUUID(); localStorage.setItem(SESSION_KEY, id); }
@@ -77,9 +117,11 @@ export function mountCommandInput(el, store, controller) {
       if (result.__queued) { ex.reply = 'Offline — this command is queued and will be sent when you are back online.'; ex.status = 'queued'; }
       else { ex.reply = result.reply ?? JSON.stringify(result); ex.status = 'done'; ex.action = result.action; ex.taskId = result.meta?.task?.id ?? null; ex.awaiting = Boolean(result.meta?.awaitingConfirmation); }
     } catch (err) {
-      ok = false; ex.reply = `Request failed: ${err.message}`; ex.status = 'error';
+      ok = false;
+      ex.reply = friendlyProviderError(err.message);
+      ex.status = 'error';
       store.set('errorUntil', Date.now() + 6000);
-      toast(err.message, 'err');
+      toast(ex.reply, 'warn');
     }
     store.set('chat', { pending: false, exchanges: [...store.get('chat').exchanges] });
     if (ok) { controller.refresh('tasks'); controller.refresh('approvals'); controller.refresh('memory'); }
