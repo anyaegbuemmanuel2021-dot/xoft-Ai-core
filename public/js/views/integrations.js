@@ -1,4 +1,5 @@
 import { card, badge, esc, toast, onDelegate } from '../dom.js';
+import { api } from '../api.js';
 
 export const title = 'Plugins & Integrations';
 const STORAGE_KEY = 'xoft_attached_apps_v1';
@@ -44,6 +45,20 @@ export async function render(container) {
         <div><strong>${CATALOG.length}+</strong><span>STARTER APPS</span></div>
         <div><strong>24/7</strong><span>YOUR WORKSPACE</span></div>
       </div>
+    </section>
+    <section class="card wa-console" aria-labelledby="wa-console-title">
+      <div class="plugin-section-head"><div><span class="plugin-kicker">OFFICIAL BUSINESS API</span><h2 id="wa-console-title">WhatsApp Control Center</h2></div><button type="button" id="wa-refresh">Refresh inbox</button></div>
+      <p class="plugin-safety-note">Connects through Meta WhatsApp Cloud API after server credentials and webhooks are configured. It does not pair to or read a personal WhatsApp Messenger account.</p>
+      <div class="wa-status-row"><span id="wa-connection-state" class="plugin-category">Checking connection…</span><span id="wa-counts" class="plugin-results"></span></div>
+      <div class="wa-compose-grid">
+        <div class="form-row"><label for="wa-contact">CONTACT NUMBER (INTERNATIONAL DIGITS)</label><input id="wa-contact" inputmode="numeric" placeholder="e.g. 2348012345678" maxlength="20" /></div>
+        <div class="form-row"><label for="wa-reply-text">REPLY MESSAGE</label><textarea id="wa-reply-text" rows="2" maxlength="4096" placeholder="Write a WhatsApp reply…"></textarea></div>
+      </div>
+      <div class="wa-actions"><button type="button" class="primary" id="wa-send-reply">Send reply</button><button type="button" id="wa-analyze">Analyze conversation</button><button type="button" id="wa-read-latest">Mark latest inbound as read</button></div>
+      <div id="wa-analysis-result" class="wa-analysis" hidden></div>
+      <div class="wa-inbox-head"><h3>Recent messages</h3><span class="plugin-results">Stored on XOFT server</span></div>
+      <div id="wa-inbox-list" class="wa-inbox-list"><div class="empty">Loading WhatsApp inbox…</div></div>
+      <div class="wa-status-draft"><label for="wa-status-text">STATUS DRAFT (manual posting required)</label><textarea id="wa-status-text" rows="2" maxlength="700" placeholder="Write a WhatsApp Status idea…"></textarea><button type="button" id="wa-make-status-draft">Prepare draft</button><p id="wa-status-draft-result" class="plugin-safety-note">The official Cloud API cannot publish Status stories. XOFT can prepare text for you to copy into WhatsApp.</p></div>
     </section>
     <div class="plugin-toolbar">
       <label class="plugin-search"><span aria-hidden="true">⌕</span><input id="plugin-search" type="search" placeholder="Search apps, tools and services…" aria-label="Search apps" /></label>
@@ -92,6 +107,83 @@ export async function render(container) {
     }).join('') || '<div class="card plugin-empty">No apps match this search. Try another term or add a custom app.</div>';
   };
   renderGrid();
+
+  const waStatus = container.querySelector('#wa-connection-state');
+  const waCounts = container.querySelector('#wa-counts');
+  const waInbox = container.querySelector('#wa-inbox-list');
+  let latestInboundId = null;
+  const loadWhatsApp = async () => {
+    waStatus.textContent = 'Checking connection…';
+    try {
+      const status = await api.get('/api/whatsapp/status');
+      waStatus.textContent = status.status === 'LIVE' ? `CONNECTED · ${status.detail}` : `WHATSAPP ${status.status}`;
+      waCounts.textContent = `${status.inbox?.inbound ?? 0} received · ${status.inbox?.outbound ?? 0} sent`;
+      waStatus.classList.toggle('wa-live', status.status === 'LIVE');
+      waStatus.title = (status.limitations || []).join(' ');
+    } catch (err) {
+      waStatus.textContent = 'Not connected / setup required';
+      waStatus.title = err.message;
+    }
+    try {
+      const result = await api.get('/api/whatsapp/inbox?limit=40');
+      const messages = result.messages || [];
+      latestInboundId = messages.find((m) => m.direction === 'inbound')?.id || null;
+      waInbox.innerHTML = messages.length ? messages.map((m) => `
+        <article class="wa-message ${m.direction === 'outbound' ? 'outbound' : 'inbound'}">
+          <div class="wa-message-meta"><strong>${esc(m.profileName || (m.direction === 'inbound' ? m.from : 'XOFT → ' + (m.to || 'contact')))}</strong><span>${esc(m.status || '')} · ${esc(m.timestamp || '')}</span></div>
+          <p>${esc(m.text)}</p>
+          ${m.direction === 'inbound' ? `<button type="button" data-wa-reply-to="${esc(m.from || '')}" data-wa-message-id="${esc(m.id || '')}">Reply / select contact</button>` : ''}
+        </article>`).join('') : '<div class="empty">No messages received yet. Once the Meta webhook is connected, new business-number messages will appear here.</div>';
+    } catch (err) {
+      waInbox.innerHTML = `<div class="empty">${esc(err.message)}. Configure the API key and WhatsApp Cloud API first.</div>`;
+    }
+  };
+  loadWhatsApp();
+  onDelegate(container, 'click', '#wa-refresh', loadWhatsApp);
+  onDelegate(container, 'click', '[data-wa-reply-to]', (el) => {
+    container.querySelector('#wa-contact').value = el.dataset.waReplyTo || '';
+    container.querySelector('#wa-contact').focus();
+    if (el.dataset.waMessageId) latestInboundId = el.dataset.waMessageId;
+  });
+  onDelegate(container, 'click', '#wa-send-reply', async () => {
+    const to = container.querySelector('#wa-contact').value.trim();
+    const message = container.querySelector('#wa-reply-text').value.trim();
+    if (!to || !message) return toast('Enter a contact number and reply message.', 'warn');
+    try {
+      await api.post('/api/whatsapp/reply', { to, message });
+      container.querySelector('#wa-reply-text').value = '';
+      toast('WhatsApp reply sent.', 'ok');
+      await loadWhatsApp();
+    } catch (err) { toast(`WhatsApp reply failed: ${err.message}`, 'err'); }
+  });
+  onDelegate(container, 'click', '#wa-analyze', async () => {
+    const contact = container.querySelector('#wa-contact').value.trim();
+    if (!contact) return toast('Select or enter a contact number first.', 'warn');
+    const output = container.querySelector('#wa-analysis-result');
+    output.hidden = false;
+    output.textContent = 'XOFT is analyzing the saved conversation…';
+    try {
+      const result = await api.post('/api/whatsapp/analyze', { contact });
+      output.textContent = result.analysis || 'No analysis returned.';
+    } catch (err) { output.textContent = `Analysis failed: ${err.message}`; }
+  });
+  onDelegate(container, 'click', '#wa-read-latest', async () => {
+    if (!latestInboundId) return toast('No inbound message ID is available yet.', 'warn');
+    try {
+      await api.post('/api/whatsapp/read', { messageId: latestInboundId });
+      toast('Read receipt sent.', 'ok');
+      await loadWhatsApp();
+    } catch (err) { toast(`Could not mark as read: ${err.message}`, 'err'); }
+  });
+  onDelegate(container, 'click', '#wa-make-status-draft', async () => {
+    const text = container.querySelector('#wa-status-text').value.trim();
+    if (!text) return toast('Write a status idea first.', 'warn');
+    try {
+      const result = await api.post('/api/whatsapp/status-draft', { text });
+      container.querySelector('#wa-status-draft-result').textContent = result.message + ' Draft: ' + result.draft;
+      toast('Status draft prepared; not published.', 'info');
+    } catch (err) { toast(`Could not prepare draft: ${err.message}`, 'err'); }
+  });
 
   onDelegate(container, 'input', '#plugin-search', (el) => { query = el.value; renderGrid(); });
   onDelegate(container, 'click', '[data-plugin-filter]', (el) => {
