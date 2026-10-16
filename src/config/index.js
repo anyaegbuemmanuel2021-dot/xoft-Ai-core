@@ -6,6 +6,27 @@ function required(name, fallback = undefined) {
   return process.env[name] ?? fallback;
 }
 
+// Google shut down the Gemini 2.0 Flash family on 1 June 2026.
+// Automatically migrate known retired IDs so a stale deployment variable
+// cannot silently keep XOFT pinned to a model that no longer exists.
+const RETIRED_GEMINI_MODELS = new Set([
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-001',
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-flash-lite-001',
+]);
+
+function configuredGeminiModel() {
+  const model = String(required('GEMINI_MODEL', 'gemini-3.8-flash') ?? '').trim();
+  if (!model || RETIRED_GEMINI_MODELS.has(model)) {
+    if (model && RETIRED_GEMINI_MODELS.has(model)) {
+      console.warn(`[XOFT] GEMINI_MODEL="${model}" has been retired. Switching to gemini-3.8-flash.`);
+    }
+    return 'gemini-3.8-flash';
+  }
+  return model;
+}
+
 export const config = {
   port: Number(required('PORT', 3000)),
   host: required('HOST', '0.0.0.0'),
@@ -122,7 +143,7 @@ export const config = {
     },
     gemini: {
       apiKey: required('GEMINI_API_KEY'),
-      model: required('GEMINI_MODEL', 'gemini-2.0-flash'),
+      model: configuredGeminiModel(),
     },
     claude: {
       apiKey: required('ANTHROPIC_API_KEY'),
