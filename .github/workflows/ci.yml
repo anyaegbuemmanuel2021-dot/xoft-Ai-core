@@ -12,6 +12,7 @@ jobs:
       - run: node --check src/index.js
       - run: node --check public/js/dashboard/CommandInput.js
       - run: node --check public/js/views/chat.js
+      - run: node --check public/js/views/integrations.js
       - run: node --check public/js/app.js
       - run: node --check public/sw.js
       - run: node --check public/js/voice/speak-out.js
