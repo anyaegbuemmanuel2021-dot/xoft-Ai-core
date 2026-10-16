@@ -145,6 +145,7 @@ export function mountCommandInput(el, store, controller) {
     if (act === 'speakout') {
       const enabled = !isSpeakOutEnabled();
       setSpeakOutEnabled(enabled);
+      window.dispatchEvent(new CustomEvent('xoft:speakout-change'));
       const button = el.querySelector('[data-act="speakout"]');
       button.textContent = enabled ? 'SPEAK OUT: ON' : 'SPEAK OUT: OFF';
       button.setAttribute('aria-pressed', String(enabled));
