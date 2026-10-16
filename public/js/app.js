@@ -78,6 +78,7 @@ function wireGlobalVoice() {
     const enabled = localStorage.getItem('xoft_speak_out_enabled') !== 'false';
     localStorage.setItem('xoft_speak_out_enabled', String(!enabled));
     if (enabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+    window.dispatchEvent(new CustomEvent('xoft:speakout-change'));
     paint();
     toast(!enabled ? 'Speak Out enabled' : 'Speak Out disabled', 'info');
   });
@@ -85,6 +86,8 @@ function wireGlobalVoice() {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     toast('Speech stopped', 'info');
   });
+  window.addEventListener('storage', (event) => { if (event.key === 'xoft_speak_out_enabled') paint(); });
+  window.addEventListener('xoft:speakout-change', paint);
   paint();
 }
 
