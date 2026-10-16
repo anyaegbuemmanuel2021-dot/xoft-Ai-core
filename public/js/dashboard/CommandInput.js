@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import { esc, toast } from '../dom.js';
 import { QUICK_COMMANDS } from './logic.js';
+import { canSpeakOut, isSpeakOutEnabled, setSpeakOutEnabled, speakOut, stopSpeaking } from '../voice/speak-out.js';
 
 const SESSION_KEY = 'xoft_chat_session'; // same session the Chat view uses
 
@@ -71,6 +72,8 @@ export function mountCommandInput(el, store, controller) {
           <button type="button" data-act="command" aria-haspopup="menu" aria-expanded="false">COMMAND</button>
           <button type="button" data-act="attach" disabled title="File attachments are not supported by the XOFT chat API yet">ATTACH</button>
           <button type="button" data-act="voice" ${canRecord ? '' : 'disabled title="Microphone recording is not available in this browser"'} aria-pressed="false">VOICE</button>
+          <button type="button" data-act="speakout" aria-pressed="${isSpeakOutEnabled()}" ${canSpeakOut() ? '' : 'disabled title="Text-to-speech is not available in this browser"'}>${isSpeakOutEnabled() ? 'SPEAK OUT: ON' : 'SPEAK OUT: OFF'}</button>
+          <button type="button" data-act="stop-speaking" ${canSpeakOut() ? '' : 'disabled'}>STOP SPEAKING</button>
           <button type="submit" class="cc-primary" data-act="send">SEND</button>
         </div>
       </div>
@@ -116,6 +119,7 @@ export function mountCommandInput(el, store, controller) {
       const result = await api.post('/api/chat', { message: text, sessionId: sessionId() });
       if (result.__queued) { ex.reply = 'Offline — this command is queued and will be sent when you are back online.'; ex.status = 'queued'; }
       else { ex.reply = result.reply ?? JSON.stringify(result); ex.status = 'done'; ex.action = result.action; ex.taskId = result.meta?.task?.id ?? null; ex.awaiting = Boolean(result.meta?.awaitingConfirmation); }
+        speakOut(ex.reply);
     } catch (err) {
       ok = false;
       ex.reply = friendlyProviderError(err.message);
@@ -138,6 +142,15 @@ export function mountCommandInput(el, store, controller) {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'command') { setMenu(!menuOpen); if (menuOpen) menu.querySelector('button')?.focus(); }
     if (act === 'voice') await toggleVoice();
+    if (act === 'speakout') {
+      const enabled = !isSpeakOutEnabled();
+      setSpeakOutEnabled(enabled);
+      const button = el.querySelector('[data-act="speakout"]');
+      button.textContent = enabled ? 'SPEAK OUT: ON' : 'SPEAK OUT: OFF';
+      button.setAttribute('aria-pressed', String(enabled));
+      toast(enabled ? 'Speak Out enabled — XOFT replies will be read aloud.' : 'Speak Out disabled.', 'info');
+    }
+    if (act === 'stop-speaking') stopSpeaking();
   });
   el.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menuOpen) { setMenu(false); el.querySelector('[data-act="command"]').focus(); } });
 
