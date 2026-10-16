@@ -5,7 +5,11 @@
 | Capability | Current source status | Live external service required |
 |---|---|---|
 | WhatsApp Cloud API outbound text | Implemented adapter/tool; requires configuration | Yes |
-| WhatsApp webhook inbound text | Implemented and signature-verified | Yes |
+| WhatsApp webhook inbound text | Implemented and signature-verified; saved to a durable inbox | Yes |
+| WhatsApp outbound reply + inbox history | Implemented through official Cloud API; visible in Plugins & Apps | Yes |
+| Mark inbound message read | Implemented through official Cloud API | Yes |
+| AI conversation analysis | Implemented using the configured XOFT model provider | Yes, plus an AI provider key |
+| Publish WhatsApp Status story | Not supported by official Cloud API; XOFT can create a draft | Manual post in WhatsApp app |
 | Twilio outbound call | Implemented adapter/tool; requires configuration | Yes |
 | Twilio inbound voice webhook | Implemented | Yes |
 | Twilio speech turn -> XOFT Core -> spoken response | Implemented through Twilio `<Gather>`/`<Say>` | Yes |
@@ -42,8 +46,9 @@ whatsapp:<phone-number-id>:<sender-number>
 and passed to the same `ExecutiveBrain` used by web chat. If XOFT returns a
 reply, the adapter sends it through the official Cloud API.
 
-Media, templates, interactive messages, delivery-status reconciliation, and
-business-account management remain additional integration work.
+The inbox stores recent inbound/outbound text messages in `data/whatsapp_inbox.json` (bounded history, max 5,000 messages by default). Delivery webhooks update stored message statuses when the corresponding outgoing message is known. Use `GET /api/whatsapp/status`, `GET /api/whatsapp/inbox`, `GET /api/whatsapp/conversations/:contact`, `POST /api/whatsapp/reply`, `POST /api/whatsapp/read`, and `POST /api/whatsapp/analyze` from the dashboard or an authenticated client. The Plugins & Apps screen provides inbox, reply, read, and analysis controls.
+
+Important limits: this is the WhatsApp Business Platform / Cloud API connector, not a QR-code session for a personal WhatsApp Messenger account. It can only see messages delivered to the configured business number/webhook; it cannot scan a user's existing private chat history. The official Cloud API does not provide a supported endpoint for publishing WhatsApp Status stories, so `POST /api/whatsapp/status-draft` prepares text for manual posting only. Media, templates, interactive messages, broader delivery reconciliation, and business-account management remain additional integration work.
 
 ## Twilio voice
 
