@@ -29,6 +29,12 @@ Status key:
 | 14 | Web research agent — search + page fetch | READY (fetch_page is LIVE) | `BRAVE_SEARCH_API_KEY` for search | `src/agents/research/SearchService.js` |
 | 15 | Voice — text-to-speech | READY | `ELEVENLABS_API_KEY` | `src/voice/VoiceService.js` |
 | 16 | Voice — speech-to-text (Whisper) | READY | `OPENAI_API_KEY` | `src/voice/VoiceService.js` |
+| 16a | WhatsApp Cloud API inbound/outbound text + AI replies | READY | Meta WhatsApp Business Platform credentials + public HTTPS webhook | `src/integrations/WhatsAppService.js`, `/webhooks/whatsapp` |
+| 16b | WhatsApp inbox/history + delivery status storage | READY | Same Cloud API webhook; persistent `/app/data` storage in production | `src/integrations/WhatsAppInboxStore.js`, Plugins & Apps |
+| 16c | Mark supported inbound WhatsApp messages as read | READY | Same Cloud API credentials | `POST /api/whatsapp/read` |
+| 16d | AI conversation analysis | READY | Saved Cloud API conversation + configured AI provider | `POST /api/whatsapp/analyze` |
+| 16e | WhatsApp Status story publishing | NOT SUPPORTED by official Cloud API | XOFT can prepare a draft; publish manually in WhatsApp | `POST /api/whatsapp/status-draft` |
+| 16f | Read personal WhatsApp Messenger chats by linking QR code | NOT BUILT | Cloud API is for Business Platform, not personal-account chat mirroring; a separate native companion with explicit OS permissions would be needed | `docs/COMMUNICATION_INTEGRATIONS.md` |
 | 17 | Wake word / streaming / hands-free voice | PARTIAL — VAD + wake-phrase matching LIVE server-side; continuous mic listening NOT BUILT (inherently client-side) | a client app with mic access for the listening loop | `src/voice/WakeWordService.js`, `POST /api/voice/vad`, `POST /api/voice/wake-check` |
 | 18 | Automation / rules engine (NL → trigger/condition/action) | READY | any 1 AI key | `src/automation/RulesEngine.js` |
 | 19 | Notification urgency classifier | READY | any 1 AI key | `src/notifications/NotificationClassifier.js` |
