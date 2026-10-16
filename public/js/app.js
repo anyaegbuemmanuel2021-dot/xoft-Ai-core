@@ -16,6 +16,7 @@ import * as approvals from './views/approvals.js';
 import * as automation from './views/automation.js';
 import * as activity from './views/activity.js';
 import * as settings from './views/settings.js';
+import * as integrations from './views/integrations.js';
 
 const ICONS = {
   command: '<path d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/>',
@@ -31,6 +32,7 @@ const ICONS = {
   runtime: '<path d="M12 2 4 6v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-4z"/><path d="m9 12 2 2 4-4"/>',
   activity: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.6a8 8 0 0 1-1.6.9l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.6-.9l-1.7.6-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.9l-1.4-1.1 1.4-2.4 1.7.6a8 8 0 0 1 1.6-.9l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.6.9l1.7-.6 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.9z"/>',
+  plugins: '<path d="M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/><rect x="6" y="6" width="12" height="12" rx="3"/><circle cx="12" cy="12" r="2"/>',
   speaker: '<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"/>',
   stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
   chevron: '<path d="m9 18 6-6-6-6"/>'
@@ -40,7 +42,7 @@ const icon = (name) => `<svg class="nav-icon" viewBox="0 0 24 24" width="18" hei
 const NAV = [
   { group: 'Workspace', items: [['command', 'Command Center', command, 'command'], ['overview', 'Overview', overview, 'overview'], ['chat', 'Chat', chat, 'chat']] },
   { group: 'Intelligence', items: [['tasks', 'Tasks', tasks, 'tasks'], ['engines', 'Agents', engines, 'agents'], ['missions', 'Missions & Goals', missions, 'missions'], ['memory', 'Memory', memory, 'memory']] },
-  { group: 'Automation', items: [['automation', 'Automations', automation, 'automation'], ['approvals', 'Approvals', approvals, 'approvals']] },
+  { group: 'Automation', items: [['automation', 'Automations', automation, 'automation'], ['approvals', 'Approvals', approvals, 'approvals'], ['integrations', 'Plugins & Apps', integrations, 'plugins']] },
   { group: 'System', items: [['devices', 'Devices', devices, 'devices'], ['runtime', 'Device Runtime', runtime, 'runtime'], ['activity', 'Activity Log', activity, 'activity'], ['settings', 'Runtime Settings', settings, 'settings']] },
 ];
 
