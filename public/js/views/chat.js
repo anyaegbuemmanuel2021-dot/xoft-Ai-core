@@ -41,6 +41,7 @@ export function render(container) {
   onDelegate(container, 'click', '#chat-speak-toggle', (button) => {
     const enabled = !isSpeakOutEnabled();
     setSpeakOutEnabled(enabled);
+    window.dispatchEvent(new CustomEvent('xoft:speakout-change'));
     button.textContent = enabled ? 'Speak Out: ON' : 'Speak Out: OFF';
     button.setAttribute('aria-pressed', String(enabled));
     toast(enabled ? 'Speak Out enabled — XOFT replies will be read aloud.' : 'Speak Out disabled.', 'info');
