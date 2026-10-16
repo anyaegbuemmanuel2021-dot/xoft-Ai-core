@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { esc, toast, onDelegate } from '../dom.js';
+import { canSpeakOut, isSpeakOutEnabled, setSpeakOutEnabled, speakOut, stopSpeaking } from '../voice/speak-out.js';
 
 export const title = 'Chat';
 
@@ -24,6 +25,8 @@ export function render(container) {
       <div id="chat-input-row">
         <textarea id="chat-input" placeholder="${mode === 'chat' ? 'Ask XOFT to do something…' : 'Describe a problem to reason through…'}"></textarea>
         <button id="chat-send" class="primary">Send</button>
+        <button id="chat-speak-toggle" type="button" aria-pressed="${isSpeakOutEnabled()}" ${canSpeakOut() ? '' : 'disabled'}>${isSpeakOutEnabled() ? 'Speak Out: ON' : 'Speak Out: OFF'}</button>
+        <button id="chat-speak-stop" type="button" ${canSpeakOut() ? '' : 'disabled'}>Stop Speaking</button>
       </div>
     </div>
   `;
@@ -35,6 +38,14 @@ export function render(container) {
   });
 
   onDelegate(container, 'click', '#chat-send', () => send(container));
+  onDelegate(container, 'click', '#chat-speak-toggle', (button) => {
+    const enabled = !isSpeakOutEnabled();
+    setSpeakOutEnabled(enabled);
+    button.textContent = enabled ? 'Speak Out: ON' : 'Speak Out: OFF';
+    button.setAttribute('aria-pressed', String(enabled));
+    toast(enabled ? 'Speak Out enabled — XOFT replies will be read aloud.' : 'Speak Out disabled.', 'info');
+  });
+  onDelegate(container, 'click', '#chat-speak-stop', () => stopSpeaking());
   container.querySelector('#chat-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(container); }
   });
@@ -67,6 +78,7 @@ async function send(container) {
       history.push({ role: 'assistant', content: '(offline — this message is queued and will send once back online)' });
     } else {
       history.push({ role: 'assistant', content: result.reply ?? result.advice ?? JSON.stringify(result) });
+      speakOut(result.reply ?? result.advice ?? JSON.stringify(result));
     }
   } catch (err) {
     // The server answers AI outages with a structured body ({success:false,error:'NO_AI_PROVIDER_AVAILABLE'|'AI_PROVIDERS_FAILED',...});
