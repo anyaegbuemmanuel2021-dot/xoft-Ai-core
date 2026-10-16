@@ -54,6 +54,21 @@ export class WhatsAppService {
     };
   }
 
+  /** Mark a supported Cloud API inbound message as read. */
+  async markRead({ messageId }) {
+    if (!this.isConfigured()) throw new Error('WhatsApp Cloud API is not configured.');
+    if (!messageId || typeof messageId !== 'string') throw new Error('messageId is required');
+    const url = `https://graph.facebook.com/${config.whatsapp.apiVersion}/${config.whatsapp.phoneNumberId}/messages`;
+    const res = await this.fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.whatsapp.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', status: 'read', message_id: messageId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`WhatsAppService: mark-read API ${res.status}: ${JSON.stringify(data).slice(0, 700)}`);
+    return { provider: 'whatsapp-cloud-api', messageId, status: 'read', raw: data };
+  }
+
   /**
    * Real reachability + credential check: calls the Cloud API's own phone-number
    * lookup rather than assuming isConfigured() means it actually works.
