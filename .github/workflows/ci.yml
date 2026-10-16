@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
+          # No pnpm-lock.yaml is committed yet; avoid setup-node cache failure.
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter @xoft/protocol typecheck
       - run: pnpm --dir apps/mobile typecheck
