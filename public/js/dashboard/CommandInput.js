@@ -9,7 +9,7 @@ function friendlyProviderError(rawMessage) {
   const raw = String(rawMessage ?? '');
   let body = null;
   try {
-    body = JSON.parse(raw.replace(/^\\s*\\d{3}\\s+/, ''));
+    body = JSON.parse(raw.replace(/^\s*\d{3}\s+/, ''));
   } catch { /* This was not a structured API error. */ }
 
   if (body?.error !== 'AI_PROVIDERS_FAILED' && body?.error !== 'NO_AI_PROVIDER_AVAILABLE') {
