@@ -1,5 +1,6 @@
 import { AIProvider } from './AIProvider.js';
 import { config } from '../config/index.js';
+import { ProviderError } from './errors.js';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -43,7 +44,20 @@ export class GeminiProvider extends AIProvider {
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`GeminiProvider: API error ${res.status} - ${errText}`);
+      let payload = null;
+      try { payload = JSON.parse(errText); } catch { /* upstream error was not JSON */ }
+      const upstreamMessage = String(payload?.error?.message ?? payload?.message ?? errText ?? 'Unknown Gemini API error');
+      const lower = upstreamMessage.toLowerCase();
+      let errorType = 'unknown';
+      if (res.status === 401 || res.status === 403) errorType = 'auth';
+      else if (res.status === 429 || /quota|rate.?limit|resource_exhausted|too many requests/.test(lower)) errorType = 'rate_limit';
+      else if (res.status === 408 || /timeout|deadline exceeded/.test(lower)) errorType = 'timeout';
+      else if (res.status >= 500) errorType = 'server_error';
+      else if (res.status === 400 || res.status === 404 || /model.*not found|not found|unsupported model|invalid argument/.test(lower)) errorType = 'invalid_request';
+      else if (res.status === 0) errorType = 'unavailable';
+      throw new ProviderError(`GeminiProvider: API error ${res.status} - ${upstreamMessage.slice(0, 500)}`, {
+        errorType, status: res.status, provider: 'gemini',
+      });
     }
 
     const data = await res.json();
