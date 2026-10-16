@@ -74,8 +74,19 @@ async function send(container) {
     let friendly = null;
     try {
       const body = JSON.parse(String(err.message).replace(/^\d{3}\s+/, ''));
-      if (body?.error === 'NO_AI_PROVIDER_AVAILABLE') friendly = 'No AI provider is currently configured or available. Everything else in Xoft still works — add a provider (API key, Ollama, FreeLLMAPI or LiteLLM) in Settings → AI providers to chat.';
-      else if (body?.error === 'AI_PROVIDERS_FAILED') friendly = 'Every configured AI provider failed to answer just now. Check Settings → AI providers (connection test) and try again.';
+      if (body?.error === 'NO_AI_PROVIDER_AVAILABLE') {
+        friendly = 'No AI provider is currently configured or available. Everything else in Xoft still works — add a provider (API key, Ollama, FreeLLMAPI or LiteLLM) in Settings → AI providers to chat.';
+      } else if (body?.error === 'AI_PROVIDERS_FAILED') {
+        const providerAdvice = (body.attempts ?? []).map((attempt) => {
+          const name = ({ openai: 'OpenAI', gemini: 'Gemini', claude: 'Claude', grok: 'Grok', ollama: 'Ollama', experiential: 'Experiential Labs', freellmapi: 'FreeLLMAPI', litellm: 'LiteLLM' })[attempt.provider] ?? attempt.provider;
+          if (attempt.errorType === 'rate_limit') return `${name} hit a rate, usage, or quota limit; check its API usage, billing/credits, and rate limits.`;
+          if (attempt.errorType === 'auth') return `${name} rejected its credentials; check the API key in deployment settings.`;
+          if (attempt.errorType === 'invalid_request') return `${name} rejected the configured model or request; check its model name.`;
+          if (['timeout', 'unavailable', 'server_error'].includes(attempt.errorType)) return `${name} is temporarily unavailable; try again shortly.`;
+          return `${name} failed; check its API key and model configuration.`;
+        });
+        friendly = ['XOFT is running, but its configured AI providers could not answer.', ...providerAdvice, 'Fix the provider issue, then retry. Check Settings → AI providers for configuration and connection tests.'].join(' ');
+      }
     } catch { /* not a structured AI error */ }
     history.push({ role: 'assistant', content: friendly ?? `Error: ${err.message}` });
     toast(friendly ? 'AI is unavailable' : err.message, friendly ? 'warn' : 'err');
