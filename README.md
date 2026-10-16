@@ -2,6 +2,8 @@
 
 > Provider-agnostic autonomous AI core. **Start here: [docs/SETUP_AND_HOSTING.md](docs/SETUP_AND_HOSTING.md)** (setup, going live, every API key and where to get it).
 
+> **Railway deployment:** see [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md) for Docker build settings, production variables, persistent volume, health checks, and GitHub auto-deploy troubleshooting.
+
 Real, working backend for a JARVIS-style personal AI assistant. Every piece
 listed as done in `docs/FEATURE_COMPARISON.md` has been executed and
 verified live during development — booted, hit with real HTTP requests,
