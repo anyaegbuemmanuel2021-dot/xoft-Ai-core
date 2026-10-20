@@ -256,6 +256,7 @@ const executiveBrain = new ExecutiveBrain({
   approvalSystem,
   worldState,
   activityLog,
+  eventBus,
   confidenceEngine,
   personality,
   address,
