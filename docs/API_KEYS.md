@@ -23,7 +23,7 @@ Availability, free tiers, pricing and supported countries change and differ by c
 
 | Capability | `.env` variables | Get it here |
 |---|---|---|
-| Web search | `BRAVE_SEARCH_API_KEY` | https://brave.com/search/api |
+| Browser + web search (default) | `LPD_TOKEN` | Create a Lightpanda Cloud token at https://lightpanda.io/docs/quickstart/installation-and-setup and save it as a hosting secret. Set `BROWSER_PROVIDER=lightpanda` and `LIGHTPANDA_CLOUD_REGION=euwest` (or `uswest`). If no cloud token is set, local Docker Compose starts `lightpanda/browser:latest` on the internal CDP endpoint. |\n| Optional structured web search | `BRAVE_SEARCH_API_KEY` | https://brave.com/search/api (if configured, XOFT uses Brave's structured search results instead of browser-based DuckDuckGo search) |
 | Voice replies (text-to-speech) | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | https://elevenlabs.io |
 | Google Workspace (Gmail/Calendar/Drive) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` | https://console.cloud.google.com (APIs & Services → Credentials → OAuth client; you must complete the OAuth consent flow to obtain the refresh token) |
 | WhatsApp (Meta Cloud API) | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` (you invent it), `WHATSAPP_APP_SECRET` | https://developers.facebook.com (create an app → add WhatsApp). Docs: https://developers.facebook.com/docs/whatsapp |
