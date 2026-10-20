@@ -8,6 +8,8 @@ services:
       HOST: 0.0.0.0
       STORAGE_MODE: sqlite
       SQLITE_PATH: /app/data/xoft.sqlite
+      BROWSER_PROVIDER: ${BROWSER_PROVIDER:-lightpanda}
+      LIGHTPANDA_CDP_URL: ${LIGHTPANDA_CDP_URL:-ws://lightpanda:9222}
     ports:
       - "${PORT:-3000}:3000"
     volumes:
