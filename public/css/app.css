@@ -494,3 +494,5 @@ body:not([data-route="command"]) #content { overflow-y: auto; }
 .social-handle-card .social-actions{align-items:stretch}
 #social-handle-feedback{overflow-wrap:anywhere}
 @media(max-width:640px){.social-handle-card .social-actions button.danger{flex-basis:100%;min-height:46px}.social-handle-dashboard{padding:14px}}
+
+.social-history-wrap{margin-top:22px;padding-top:18px;border-top:1px solid rgba(91,196,214,.13)}.social-history-wrap .plugin-section-head{align-items:center}.social-history-wrap h3{margin:0;color:#cdeef2;font-size:13px}.social-history-wrap .social-post{padding:12px}.social-history-wrap .social-post p{margin-bottom:0}
