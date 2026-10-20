@@ -40,6 +40,7 @@ import { buildEmailTools } from './tools/builtins/emailTools.js';
 import { buildCalendarTools } from './tools/builtins/calendarTools.js';
 import { buildResearchTools } from './tools/builtins/researchTools.js';
 import { buildMediaTools } from './tools/builtins/mediaTools.js';
+import { buildSocialTools } from './tools/builtins/socialTools.js';
 import { ActivityLog } from './activity/ActivityLog.js';
 import { ApprovalSystem } from './approval/ApprovalSystem.js';
 import { TaskPlanner } from './planner/TaskPlanner.js';
@@ -177,6 +178,7 @@ for (const tool of [
   ...buildCalendarTools(),
   ...buildResearchTools(),
   ...buildMediaTools(),
+  ...buildSocialTools({ socialMediaScheduler }),
   ...buildCommunicationTools({ whatsappService, twilioService }),
   ...buildDeviceTools({ deviceManager, visionInterpreter, activityLog }),
   ...buildRuntimeTools({ deviceManager }),
@@ -302,7 +304,6 @@ const opportunityScout = new OpportunityScout({
   eventBus,
 });
 opportunityScout.start();
-const socialMediaScheduler = new SocialMediaScheduler({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, activityLog });
 socialMediaScheduler.start();
 const proactiveEngine = new ProactiveEngine({ worldState, eventBus, activityLog, deviceManager });
 proactiveEngine.start();
