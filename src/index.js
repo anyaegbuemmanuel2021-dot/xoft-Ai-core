@@ -104,6 +104,7 @@ import { ChannelGateway } from './channels/ChannelGateway.js';
 import { WhatsAppService } from './integrations/WhatsAppService.js';
 import { WhatsAppInboxStore } from './integrations/WhatsAppInboxStore.js';
 import { TwilioService } from './integrations/TwilioService.js';
+import { SocialMediaScheduler } from './social/SocialMediaScheduler.js';
 import { buildCommunicationTools } from './tools/builtins/communicationTools.js';
 
 const durableStore = config.storage.mode === 'sqlite' ? new SqliteStore(config.storage.sqlitePath) : null;
@@ -301,6 +302,8 @@ const opportunityScout = new OpportunityScout({
   eventBus,
 });
 opportunityScout.start();
+const socialMediaScheduler = new SocialMediaScheduler({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, activityLog });
+socialMediaScheduler.start();
 const proactiveEngine = new ProactiveEngine({ worldState, eventBus, activityLog, deviceManager });
 proactiveEngine.start();
 
@@ -577,6 +580,51 @@ app.post('/api/opportunity-scout/run', async (_req, res) => {
   try { return res.json(await opportunityScout.runOnce()); }
   catch (err) { return res.status(502).json({ error: err.message }); }
 });
+// --- Social content calendar and approved scheduled publishing ---
+app.get('/api/social/summary', (_req, res) => res.json(socialMediaScheduler.summary()));
+app.get('/api/social/posts', (req, res) => res.json(socialMediaScheduler.list({ status: req.query.status, platform: req.query.platform })));
+app.post('/api/social/posts', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot create or schedule public social posts.' });
+  try { return res.status(201).json(socialMediaScheduler.create(req.body ?? {})); }
+  catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.patch('/api/social/posts/:id', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot edit public social posts.' });
+  try {
+    const post = socialMediaScheduler.update(req.params.id, req.body ?? {});
+    if (!post) return res.status(404).json({ error: 'Social post not found' });
+    return res.json(post);
+  } catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.post('/api/social/posts/:id/schedule', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot schedule public social posts.' });
+  try {
+    const post = socialMediaScheduler.schedule(req.params.id, req.body ?? {});
+    if (!post) return res.status(404).json({ error: 'Social post not found' });
+    return res.json({ post, note: 'Scheduled and explicitly approved. Publication will only occur while XOFT is running and the selected connector can publish.' });
+  } catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.post('/api/social/posts/:id/cancel', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot cancel public social posts.' });
+  try {
+    const post = socialMediaScheduler.cancel(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Social post not found' });
+    return res.json(post);
+  } catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.post('/api/social/posts/:id/publish-now', requireAdmin, async (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot publish public social posts.' });
+  try {
+    const post = socialMediaScheduler.get(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Social post not found' });
+    if (post.status === 'draft' || post.status === 'failed') {
+      const scheduled = socialMediaScheduler.schedule(post.id, { ...req.body, scheduledAt: new Date(Date.now() + 1000).toISOString() });
+      return res.json(await socialMediaScheduler.publish(scheduled.id));
+    }
+    return res.json(await socialMediaScheduler.publish(post.id));
+  } catch (err) { return res.status(502).json({ error: err.message, note: 'Check connector status before retrying; external providers can have accepted a request even if the response failed.' }); }
+});
+
 app.get('/api/briefings', (_req, res) => res.json(briefingScheduler.status()));
 app.patch('/api/briefings/settings', (req, res) => {
   try { return res.json(briefingScheduler.updateSettings(req.body ?? {})); }
