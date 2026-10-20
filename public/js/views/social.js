@@ -21,7 +21,7 @@ function platformChecks(selected = ['facebook', 'instagram', 'linkedin']) {
   return PLATFORMS.map(([id, label]) => `<label class="social-platform"><input type="checkbox" name="social-platform" value="${id}" ${selected.includes(id) ? 'checked' : ''}><span>${label}</span></label>`).join('');
 }
 function accountChecks() {
-  return ACCOUNT_PROFILES.map((account) => '<label class="social-platform"><input type="checkbox" name="social-account" value="' + account.profileId + '" data-platform="' + account.platform + '" checked><span>' + account.platform + ': ' + account.handle + '</span></label>').join('');
+  return ACCOUNT_PROFILES.map((account) => '<label class="social-platform"><input type="checkbox" name="social-account" value="' + account.profileId + '" data-platform="' + account.platform + '" ' + (['facebook', 'instagram', 'linkedin'].includes(account.platform) ? 'checked' : '') + '><span>' + account.platform + ': ' + account.handle + '</span></label>').join('');
 }
 
 export async function render(container) {
@@ -95,7 +95,7 @@ export async function render(container) {
 
   const $ = (id) => container.querySelector('#' + id);
   const selectedPlatforms = () => [...container.querySelectorAll('input[name="social-platform"]:checked')].map((el) => el.value);
-  const selectedTargetAccounts = () => [...container.querySelectorAll('input[name="social-account"]:checked')].map((el) => ACCOUNT_PROFILES.find((account) => account.profileId === el.value)).filter(Boolean);
+  const selectedTargetAccounts = () => [...container.querySelectorAll('input[name="social-account"]:checked')].map((el) => ACCOUNT_PROFILES.find((account) => account.profileId === el.value)).filter((account) => account && selectedPlatforms().includes(account.platform));
   const setFeedback = (message) => { $('social-feedback').textContent = message; };
   const refresh = async () => {
     [summary, posts] = await Promise.all([api.get('/api/social/summary'), api.get('/api/social/posts')]);
