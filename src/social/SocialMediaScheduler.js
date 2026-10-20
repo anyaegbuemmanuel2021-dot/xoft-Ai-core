@@ -15,6 +15,21 @@ function normalizePlatforms(value) {
   if (platforms.some((x) => !PLATFORMS.has(x))) throw new Error('Unsupported platform selected');
   return platforms;
 }
+function normalizeTargetAccounts(value, platforms) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error('targetAccounts must be a list');
+  return value.slice(0, 20).map((entry) => {
+    if (!entry || typeof entry !== 'object') throw new Error('Each target account must be an object');
+    const platform = text(String(entry.platform ?? '').toLowerCase(), 'target account platform', 40);
+    if (!PLATFORMS.has(platform) || !platforms.includes(platform)) throw new Error('Target account platform must be one of the selected post platforms');
+    return {
+      platform,
+      profileId: text(String(entry.profileId ?? entry.handle ?? entry.name ?? ''), 'target account profileId', 180),
+      name: String(entry.name ?? '').trim().slice(0, 180),
+      handle: String(entry.handle ?? '').trim().slice(0, 180),
+    };
+  });
+}
 
 /**
  * Persistent social publishing calendar. Publishing is delegated to an explicitly
@@ -50,7 +65,7 @@ export class SocialMediaScheduler {
     const now = this.now().toISOString();
     const post = {
       id: crypto.randomUUID(), title: String(input.title ?? '').trim().slice(0, 180) || content.slice(0, 80),
-      content, platforms, mediaUrls: Array.isArray(input.mediaUrls) ? input.mediaUrls.map((x) => text(String(x), 'media URL', 2048)).slice(0, 10) : [],
+      content, platforms, targetAccounts: normalizeTargetAccounts(input.targetAccounts, platforms), mediaUrls: Array.isArray(input.mediaUrls) ? input.mediaUrls.map((x) => text(String(x), 'media URL', 2048)).slice(0, 10) : [],
       hashtags: Array.isArray(input.hashtags) ? [...new Set(input.hashtags.map((x) => String(x).trim().replace(/^#/, '').replace(/[^\p{L}\p{N}_]/gu, '')).filter(Boolean))].slice(0, 30) : [],
       status: 'draft', scheduledAt: null, approvedBy: null, approvalNote: null,
       connectorId: null, publishTool: null, publishInput: null, attempts: 0,
@@ -74,6 +89,8 @@ export class SocialMediaScheduler {
     if ('title' in input) next.title = text(input.title, 'title', 180);
     if ('content' in input) next.content = text(input.content, 'content', 10000);
     if ('platforms' in input) next.platforms = normalizePlatforms(input.platforms);
+    if ('targetAccounts' in input) next.targetAccounts = normalizeTargetAccounts(input.targetAccounts, next.platforms);
+    else if ('platforms' in input) next.targetAccounts = normalizeTargetAccounts(next.targetAccounts ?? [], next.platforms);
     if ('hashtags' in input) next.hashtags = Array.isArray(input.hashtags) ? [...new Set(input.hashtags.map((x) => String(x).trim().replace(/^#/, '').replace(/[^\p{L}\p{N}_]/gu, '')).filter(Boolean))].slice(0, 30) : [];
     if ('mediaUrls' in input) {
       if (!Array.isArray(input.mediaUrls)) throw new Error('mediaUrls must be a list');
@@ -119,7 +136,7 @@ export class SocialMediaScheduler {
     const publishing = { ...post, status: 'publishing', attempts: post.attempts + 1, lastError: null, updatedAt: this.now().toISOString() };
     this._save(publishing);
     try {
-      const input = { ...post.publishInput, post: { id: post.id, title: post.title, content: post.content, platforms: post.platforms, hashtags: post.hashtags, mediaUrls: post.mediaUrls, scheduledAt: post.scheduledAt } };
+      const input = { ...post.publishInput, post: { id: post.id, title: post.title, content: post.content, platforms: post.platforms, targetAccounts: post.targetAccounts ?? [], hashtags: post.hashtags, mediaUrls: post.mediaUrls, scheduledAt: post.scheduledAt } };
       const result = await this.connectorManager.call(post.connectorId, { tool: post.publishTool, input });
       const providerResult = result?.result;
       if (providerResult?.success === false || providerResult?.published === false || providerResult?.error) throw new Error(String(providerResult.error ?? providerResult.message ?? 'Connector did not confirm publishing'));
