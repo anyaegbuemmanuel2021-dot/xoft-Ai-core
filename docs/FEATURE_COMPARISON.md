@@ -154,3 +154,4 @@ run in this sandbox (no network, so `npm install` could not run): 268 passing,
 being installed here (same root cause as before this change; verified no
 new failures were introduced). `npm install && npm test` in an environment
 with registry access is expected to resolve those 19.
+| 64 | Social Studio (AI copy drafts, persistent calendar, approval-gated scheduled publishing) | PARTIAL — draft generation/calendar and generic connector scheduler implemented; live platform publishing requires a configured provider connector and has not been verified against a real account | any configured AI provider for copy; publishing connector/API permissions for actual posts | `src/social/SocialMediaScheduler.js`, `src/tools/builtins/socialTools.js`, `public/js/views/social.js`, `docs/SOCIAL_STUDIO.md` |
