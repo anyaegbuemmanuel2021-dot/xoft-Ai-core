@@ -10,6 +10,13 @@ jobs:
       - run: npm install
       - run: npm test
       - run: node --check src/index.js
+      - run: node --check src/scheduler/MissionAutopilot.js
+      - run: node --check src/proactive/OpportunityScout.js
+      - run: node --check src/proactive/BriefingScheduler.js
+      - run: node --check src/missions/MissionManager.js
+      - run: node --check src/business/ProjectDeliveryManager.js
+      - run: node --check public/js/views/missions.js
+      - run: node --check public/js/views/opportunities.js
       - run: node --check src/agents/research/SmartVerificationHandler.js
       - run: node --check src/agents/research/SearchService.js
       - run: node --check src/integrations/WhatsAppInboxStore.js
