@@ -41,7 +41,7 @@ export class OpportunityFollowUpPlanner {
     const data = this.store.load();
     const draft = data.drafts.find((item) => item.id === id);
     if (!draft) return null;
-    if (draft.status !== 'draft') throw new Error('Only an unsent draft can be sent');
+    if (draft.status !== 'draft') throw new Error('This follow-up draft has already been sent; duplicate sends are not allowed');
     if (!provider || !messageId || !recipient || !approvedBy || !consentEvidence) throw new Error('Provider, message id, recipient, approver, and consent evidence are required');
     Object.assign(draft, {
       status: 'sent', sentAt: this.now().toISOString(),
