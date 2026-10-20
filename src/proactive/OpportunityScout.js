@@ -109,14 +109,24 @@ export class OpportunityScout {
           for (const result of results) {
             if (!result?.title || !result?.url) { skipped++; continue; }
             try {
+              const description = String(result.description ?? '').slice(0, 4000);
+              const scoring = scoreOpportunity({ title: result.title, description, query, url: result.url });
+              const riskFlags = scoring.signals
+                .filter((signal) => ['unpaid_or_speculative', 'course_or_training', 'aggregator_or_social', 'social_or_profile_source_needs_manual_review'].includes(signal.name))
+                .map((signal) => signal.name);
               this.opportunityStore.create({
                 title: String(result.title).slice(0, 180),
                 sourceUrl: result.url,
                 service: query.slice(0, 180),
-                fitRationale: String(result.description ?? 'Automatically discovered public result; inspect and qualify before contact.').slice(0, 4000),
-                evidence: result.description ? [String(result.description).slice(0, 1000)] : [],
+                fitRationale: (description || 'Automatically discovered public result; inspect and qualify before contact.').slice(0, 4000),
+                evidence: description ? [description.slice(0, 1000)] : [],
+                priorityScore: scoring.score,
+                priority: scoring.priority,
+                riskFlags,
+                recommendedAction: scoring.recommendation,
+                notes: `Automated heuristic score: ${scoring.score}/100 (${scoring.confidence}). Signals: ${scoring.signals.map((signal) => signal.name).join(', ') || 'none detected'}. This is not buyer verification.`,
                 stage: 'researched',
-                nextAction: 'Review source, verify legitimacy and deadline, estimate delivery effort and price, then qualify the lead.',
+                nextAction: scoring.recommendation
               });
               saved++;
             } catch (err) {
