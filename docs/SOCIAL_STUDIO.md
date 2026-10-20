@@ -5,7 +5,8 @@ Social Studio provides a persistent social content calendar in the XOFT dashboar
 ## What it does
 
 - Generate a post draft with XOFT's configured reasoning provider from a brief, goal, tone, and optional call to action.
-- Save drafts with target platforms and hashtags.
+- Save drafts with target platforms, explicit account-profile targets, and hashtags.
+- Pass selected account profiles to the configured publishing adapter so it can route each post to the correct authorized page/profile.
 - Schedule approved posts for Facebook, Instagram, LinkedIn, X, TikTok, YouTube, Threads, or another supported target.
 - Persist draft/schedule/publish state in SQLite when STORAGE_MODE=sqlite and SQLITE_PATH are configured, or in MEMORY_DATA_DIR/social-calendar.json when using JSON storage.
 - Record connector results and activity events; do not infer delivery/read counts from an accepted publish response.
@@ -13,6 +14,8 @@ Social Studio provides a persistent social content calendar in the XOFT dashboar
 ## Publishing connector requirement
 
 XOFT does not directly hold universal credentials for every social network. Configure an explicit connector in XOFT_CONNECTORS_JSON and choose its id and publish tool in Social Studio. Discover the connector's tool names through GET /api/connectors/:id/tools.
+
+The Social Studio includes profile targets for Facebook `Softly Bot`, Instagram `@softly1810`, TikTok `@Softly1810`, and LinkedIn `Emmanuel Iyke`. These are profile labels supplied in the dashboard, not authenticated connections. The configured adapter must map each `targetAccounts[].profileId` to the real account/page identifier it has permission to publish to. Never treat a profile label as proof of login or authorization.
 
 The configured connector must accept this generic HTTP JSON contract:
 
@@ -26,6 +29,7 @@ The configured connector must accept this generic HTTP JSON contract:
       "title": "Post title",
       "content": "Post copy",
       "platforms": ["linkedin"],
+      "targetAccounts": [{"profileId":"linkedin:emmanuel-iyke","platform":"linkedin","name":"Emmanuel Iyke","handle":"Emmanuel Iyke"}],
       "hashtags": ["BusinessGrowth"],
       "mediaUrls": [],
       "scheduledAt": "ISO-8601 timestamp"
@@ -61,7 +65,7 @@ All write endpoints require the XOFT admin credential; device-scoped credentials
 ## Operational limits
 
 - The server must remain awake and online at the scheduled time. If a free host sleeps, posts will not publish while it is asleep.
-- No provider is preconfigured by this feature. Without a real publishing connector, XOFT can generate and save drafts but cannot publish externally.
+- No provider is preconfigured by this feature. The known profile labels are not connected accounts. Without a real publishing connector authorized for each target profile, XOFT can generate and save drafts but cannot publish externally.
 - Platform API permissions, account type, media requirements, rate limits, and scheduling rules are enforced by the connected provider/adapter.
 - A provider response alone may not prove a post is visible to the public. Verify the provider's post URL/status when available.
 - AI drafts can be wrong. Review business facts, prices, links, claims, copyright, and brand voice before approving.
