@@ -24,7 +24,7 @@ function fixture() {
     activityLog: { log() {} },
     now: () => new Date('2026-10-20T10:00:00.000Z'),
   });
-  return { manager, dataDir, cancelled, cleanup: () => fs.rmSync(dataDir, { recursive: true, force: true }) };
+  return { manager, dataDir, cancelled, posts, cleanup: () => fs.rmSync(dataDir, { recursive: true, force: true }) };
 }
 
 test('social handles support multiple platform profiles and reject duplicate handles', () => {
@@ -60,13 +60,13 @@ test('per-handle kill switch disables future autonomy and cancels only that hand
     f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' });
     // Simulate the queued post being associated with this handle's generated id.
     const ownPost = { id: 'queued-own', status: 'scheduled', targetAccounts: [{ profileId: handle.handle, handleId: handle.id }] };
-    const originalList = f.manager.socialMediaScheduler.list;
-    f.manager.socialMediaScheduler.list = ({ status }) => [...originalList({ status }), ownPost].filter((post) => !status || post.status === status);
+    f.posts.push(ownPost);
     const result = f.manager.kill(handle.id, 'operator test');
     assert.equal(result.killed, true);
     assert.equal(result.handle.autoEnabled, false);
     assert.equal(result.handle.nextRunAt, null);
-    assert.ok(f.cancelled.includes('queued-own'));
+    assert.equal(result.cancelledScheduledPosts, 1);
+    assert.equal(ownPost.status, 'cancelled');
     assert.ok(!f.cancelled.includes('queued-other'));
   } finally { f.cleanup(); }
 });
