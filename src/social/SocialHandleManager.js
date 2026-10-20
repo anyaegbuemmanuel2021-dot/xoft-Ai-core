@@ -132,8 +132,19 @@ export class SocialHandleManager {
   }
   cancelQueuedForHandle(id) {
     let cancelled = 0;
+    const handle = this.get(id);
+    const normalize = (value) => String(value ?? '').trim().toLowerCase().replace(/^@/, '');
+    const expected = normalize(handle?.handle);
     for (const post of this.socialMediaScheduler.list({ status: 'scheduled', limit: 500 })) {
-      if ((post.targetAccounts ?? []).some((account) => account.handleId === id || account.profileId === id)) {
+      const belongsToHandle = (post.targetAccounts ?? []).some((account) => {
+        if (account.handleId === id || account.profileId === id) return true;
+        if (!handle || account.platform !== handle.platform) return false;
+        const profile = normalize(account.profileId);
+        const accountHandle = normalize(account.handle);
+        const profileName = profile.includes(':') ? profile.slice(profile.indexOf(':') + 1) : profile;
+        return Boolean(expected && (accountHandle === expected || profile === expected || profileName === expected));
+      });
+      if (belongsToHandle) {
         try { if (this.socialMediaScheduler.cancel(post.id)) cancelled += 1; } catch { /* leave terminal or in-flight posts untouched */ }
       }
     }
