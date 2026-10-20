@@ -68,7 +68,7 @@ export async function render(container) {
         <button data-delivery-save="${esc(p.id)}">Save project details</button>
         <details style="margin-top:10px"><summary>Proposal draft</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(p.proposalText || '')}</pre><button data-delivery-copy-proposal="${esc(p.id)}">Copy proposal</button></details>
         ${p.invoiceText ? `<details><summary>Invoice draft</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(p.invoiceText)}</pre><button data-delivery-copy-invoice="${esc(p.id)}">Copy invoice</button></details>` : ''}
-        <div class="form-row"><label for="delivery-evidence-${esc(p.id)}">Evidence / action note</label><textarea id="delivery-evidence-${esc(p.id)}" placeholder="Client acceptance reference, deployed URL, invoice reference, or payment receipt reference"></textarea></div>
+        <div class="form-row"><label for="delivery-evidence-${esc(p.id)}">Evidence / action note</label><textarea id="delivery-evidence-${esc(p.id)}" placeholder="Client acceptance reference, deployed URL, invoice reference, or payment reference/receipt"></textarea></div>
         <div class="inline" style="gap:6px;flex-wrap:wrap;margin-top:8px">
           ${actionsFor(p).map((a) => `<button data-delivery-action="${a.action}" data-delivery-id="${esc(p.id)}" class="${a.danger ? 'danger' : ''}">${esc(a.label)}</button>`).join('')}
         </div>
