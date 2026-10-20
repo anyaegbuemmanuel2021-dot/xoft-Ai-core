@@ -87,6 +87,7 @@ import { ProactiveEngine } from './proactive/ProactiveEngine.js';
 import { MissionManager } from './missions/MissionManager.js';
 import { OpportunityStore } from './business/OpportunityStore.js';
 import { BriefingScheduler } from './proactive/BriefingScheduler.js';
+import { OpportunityScout } from './proactive/OpportunityScout.js';
 import { RecoveryEngine } from './recovery/RecoveryEngine.js';
 import { ContextEngine } from './context/ContextEngine.js';
 import { VisionInterpreter } from './vision/VisionInterpreter.js';
@@ -283,6 +284,16 @@ const briefingScheduler = new BriefingScheduler({
   },
 });
 briefingScheduler.start();
+const opportunityScout = new OpportunityScout({
+  dataDir: config.memory.dataDir,
+  sqliteStore: durableStore,
+  toolRegistry,
+  memory,
+  opportunityStore,
+  activityLog,
+  eventBus,
+});
+opportunityScout.start();
 const proactiveEngine = new ProactiveEngine({ worldState, eventBus, activityLog, deviceManager });
 proactiveEngine.start();
 
@@ -526,6 +537,15 @@ app.post('/api/opportunities/discover', async (req, res) => {
     activityLog.log({ type: 'opportunity_discovery_failed', detail: { query, error: err.message } });
     return res.status(502).json({ error: err.message, note: 'Web research is unavailable until the configured browser/search integration is reachable.' });
   }
+});
+app.get('/api/opportunity-scout', (_req, res) => res.json(opportunityScout.status()));
+app.patch('/api/opportunity-scout/settings', (req, res) => {
+  try { return res.json(opportunityScout.update(req.body ?? {})); }
+  catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.post('/api/opportunity-scout/run', async (_req, res) => {
+  try { return res.json(await opportunityScout.runOnce()); }
+  catch (err) { return res.status(502).json({ error: err.message }); }
 });
 app.get('/api/briefings', (_req, res) => res.json(briefingScheduler.status()));
 app.patch('/api/briefings/settings', (req, res) => {
