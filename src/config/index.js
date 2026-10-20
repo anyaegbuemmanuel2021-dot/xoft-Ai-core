@@ -198,8 +198,8 @@ export const config = {
   // AI_FALLBACK_ENABLED=false and know only their chosen primary is ever tried.
   aiRouting: {
     fallbackEnabled: String(required('AI_FALLBACK_ENABLED', 'true')).toLowerCase() === 'true',
-    primaryProvider: required('AI_PRIMARY_PROVIDER', null),
-    fallbackProviders: String(required('AI_FALLBACK_PROVIDERS', ''))
+    primaryProvider: required('AI_PRIMARY_PROVIDER', 'openai'),
+    fallbackProviders: String(required('AI_FALLBACK_PROVIDERS', 'gemini,openrouter,claude,grok,experiential,litellm,freellmapi'))
       .split(',')
       .map((p) => p.trim())
       .filter(Boolean),
