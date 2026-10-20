@@ -15,6 +15,9 @@ test('opportunity API routes are mounted and backed by durable store', () => {
     "app.post('/api/opportunities'",
     "app.patch('/api/opportunities/:id'",
   ]) assert.ok(index.includes(route), `missing route: ${route}`);
+  assert.match(index, /app\.post\('\/api\/opportunities\/discover'/);
+  assert.match(index, /toolRegistry\.execute\('search_web'/);
+  assert.match(index, /not verified clients or guaranteed income/);
   assert.match(index, /OPPORTUNITY_DUPLICATE/);
   assert.match(index, /Device-scoped credentials cannot/);
 });
@@ -28,6 +31,8 @@ test('dashboard navigation and PWA shell include the opportunities view', () => 
   assert.match(sw, /xoft-shell-v11/);
   assert.match(sw, /\/js\/views\/opportunities\.js/);
   for (const endpoint of ['/api/opportunities', '/api/opportunities/summary']) assert.ok(view.includes(endpoint));
+  assert.match(view, /opp-discover/);
+  assert.match(view, /\/api\/opportunities\/discover/);
   assert.match(view, /esc\(item\.title\)/);
   assert.match(view, /rel="noopener noreferrer"/);
 });
