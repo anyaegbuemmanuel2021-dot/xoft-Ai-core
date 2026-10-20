@@ -7,12 +7,21 @@ const PLATFORMS = [
   ['facebook', 'Facebook'], ['instagram', 'Instagram'], ['linkedin', 'LinkedIn'],
   ['x', 'X'], ['tiktok', 'TikTok'], ['youtube', 'YouTube'], ['threads', 'Threads'], ['other', 'Other'],
 ];
+const ACCOUNT_PROFILES = [
+  { profileId: 'facebook:softly-bot', platform: 'facebook', name: 'Softly Bot', handle: 'Softly Bot' },
+  { profileId: 'instagram:softly1810', platform: 'instagram', name: 'Softly Digitals', handle: '@softly1810' },
+  { profileId: 'tiktok:softly1810', platform: 'tiktok', name: 'Softly Digitals', handle: '@Softly1810' },
+  { profileId: 'linkedin:emmanuel-iyke', platform: 'linkedin', name: 'Emmanuel Iyke', handle: 'Emmanuel Iyke' },
+];
 const localTime = (value) => value ? new Date(value).toLocaleString() : 'Not set';
 const safe = (value) => esc(String(value ?? ''));
 const safeHref = (value) => { try { const url = new URL(String(value)); return ['http:', 'https:'].includes(url.protocol) ? esc(url.href) : ''; } catch { return ''; } };
 
 function platformChecks(selected = ['facebook', 'instagram', 'linkedin']) {
   return PLATFORMS.map(([id, label]) => `<label class="social-platform"><input type="checkbox" name="social-platform" value="${id}" ${selected.includes(id) ? 'checked' : ''}><span>${label}</span></label>`).join('');
+}
+function accountChecks() {
+  return ACCOUNT_PROFILES.map((account) => '<label class="social-platform"><input type="checkbox" name="social-account" value="' + account.profileId + '" data-platform="' + account.platform + '" checked><span>' + account.platform + ': ' + account.handle + '</span></label>').join('');
 }
 
 export async function render(container) {
@@ -40,6 +49,7 @@ export async function render(container) {
         <div class="form-row"><label for="social-cta">CALL TO ACTION (OPTIONAL)</label><input id="social-cta" maxlength="240" placeholder="e.g. Send us a message for a quote" /></div>
       </div>
       <div class="form-row"><label>PLATFORMS</label><div class="social-platforms">${platformChecks()}</div></div>
+      <div class="form-row"><label>TARGET ACCOUNTS / PROFILES</label><div class="social-platforms">${accountChecks()}</div><p class="plugin-safety-note">These are saved profile targets, not proof of login or authorization. XOFT passes the selected profile IDs to your configured publishing connector.</p></div>
       <div class="form-row"><label for="social-content">POST COPY</label><textarea id="social-content" rows="7" maxlength="10000" placeholder="Generate a draft or write your post here…"></textarea></div>
       <div class="form-row"><label for="social-hashtags">HASHTAGS (comma-separated, optional)</label><input id="social-hashtags" maxlength="500" placeholder="WebDevelopment, BusinessGrowth, AI" /></div>
       <div class="social-actions"><button type="button" id="social-generate" class="primary">✦ Generate content with XOFT</button><button type="button" id="social-save">Save as draft</button></div>
@@ -85,6 +95,7 @@ export async function render(container) {
 
   const $ = (id) => container.querySelector('#' + id);
   const selectedPlatforms = () => [...container.querySelectorAll('input[name="social-platform"]:checked')].map((el) => el.value);
+  const selectedTargetAccounts = () => [...container.querySelectorAll('input[name="social-account"]:checked')].map((el) => ACCOUNT_PROFILES.find((account) => account.profileId === el.value)).filter(Boolean);
   const setFeedback = (message) => { $('social-feedback').textContent = message; };
   const refresh = async () => {
     [summary, posts] = await Promise.all([api.get('/api/social/summary'), api.get('/api/social/posts')]);
@@ -128,6 +139,8 @@ export async function render(container) {
     $('social-content').value = selected.content ?? '';
     $('social-hashtags').value = (selected.hashtags ?? []).join(', ');
     container.querySelectorAll('input[name="social-platform"]').forEach((el) => { el.checked = selected.platforms.includes(el.value); });
+    const targetIds = new Set((selected.targetAccounts ?? []).map((account) => account.profileId));
+    container.querySelectorAll('input[name="social-account"]').forEach((el) => { el.checked = targetIds.size ? targetIds.has(el.value) : selected.platforms.includes(el.dataset.platform); });
     setFeedback('Loaded saved post. Make changes, then save to update the selected draft.');
   });
   $('social-save').addEventListener('click', async () => {
@@ -135,7 +148,7 @@ export async function render(container) {
       const content = $('social-content').value.trim();
       if (!content) return setFeedback('Write or generate the post copy first.');
       const hashtags = $('social-hashtags').value.split(',').map((x) => x.trim()).filter(Boolean);
-      const payload = { title: $('social-brief').value.trim(), content, platforms: selectedPlatforms(), hashtags };
+      const payload = { title: $('social-brief').value.trim(), content, platforms: selectedPlatforms(), targetAccounts: selectedTargetAccounts(), hashtags };
       const selectedId = $('social-post-select').value;
       const editable = posts.find((item) => item.id === selectedId && ['draft', 'failed'].includes(item.status));
       const post = editable
