@@ -108,6 +108,7 @@ import { WhatsAppInboxStore } from './integrations/WhatsAppInboxStore.js';
 import { TwilioService } from './integrations/TwilioService.js';
 import { SocialMediaScheduler } from './social/SocialMediaScheduler.js';
 import { SocialEngagementManager } from './social/SocialEngagementManager.js';
+import { SocialHandleManager } from './social/SocialHandleManager.js';
 import { buildCommunicationTools } from './tools/builtins/communicationTools.js';
 
 const durableStore = config.storage.mode === 'sqlite' ? new SqliteStore(config.storage.sqlitePath) : null;
@@ -133,6 +134,7 @@ const injectionGuard = new PromptInjectionGuard({ activityLog });
 const connectorManager = new ConnectorManager({ definitions: config.connectors.definitions, activityLog });
 const socialMediaScheduler = new SocialMediaScheduler({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, activityLog });
 const socialEngagementManager = new SocialEngagementManager({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, activityLog });
+const socialHandleManager = new SocialHandleManager({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, socialMediaScheduler, router, activityLog });
 const whatsappService = new WhatsAppService();
 const whatsappInbox = new WhatsAppInboxStore({ dataDir: config.memory.dataDir });
 const twilioService = new TwilioService();
@@ -310,6 +312,7 @@ const opportunityScout = new OpportunityScout({
 });
 opportunityScout.start();
 socialMediaScheduler.start();
+socialHandleManager.start();
 const proactiveEngine = new ProactiveEngine({ worldState, eventBus, activityLog, deviceManager });
 proactiveEngine.start();
 
@@ -654,6 +657,46 @@ app.post('/api/social/engagement/:id/ignore', requireAdmin, (req, res) => {
     if (!item) return res.status(404).json({ error: 'Social engagement not found' });
     return res.json(item);
   } catch (err) { return res.status(400).json({ error: err.message }); }
+});
+// Per-handle social autonomy. Each account has an independent, persistent kill switch.
+app.get('/api/social/handles', requireAdmin, (_req, res) => res.json(socialHandleManager.list()));
+app.get('/api/social/handles/history', requireAdmin, (req, res) => res.json(socialHandleManager.history(req.query.limit)));
+app.post('/api/social/handles', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot add social accounts.' });
+  try { return res.status(201).json(socialHandleManager.create(req.body ?? {})); }
+  catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.patch('/api/social/handles/:id', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot edit social accounts.' });
+  try {
+    const item = socialHandleManager.update(req.params.id, req.body ?? {});
+    if (!item) return res.status(404).json({ error: 'Social handle not found' });
+    return res.json(item);
+  } catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.post('/api/social/handles/:id/learn', requireAdmin, async (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot access private social account settings.' });
+  try { return res.json(await socialHandleManager.learn(req.params.id)); }
+  catch (err) { return res.status(502).json({ error: err.message }); }
+});
+app.post('/api/social/handles/:id/run', requireAdmin, async (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot run social autopilot.' });
+  try { return res.json(await socialHandleManager.runHandle(req.params.id)); }
+  catch (err) { return res.status(502).json({ error: err.message }); }
+});
+app.post('/api/social/handles/:id/autonomy', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot enable social autopilot.' });
+  try {
+    const item = socialHandleManager.setAutonomy(req.params.id, req.body?.enabled === true, { confirmedBy: req.body?.confirmedBy });
+    if (!item) return res.status(404).json({ error: 'Social handle not found' });
+    return res.json(item);
+  } catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.post('/api/social/handles/:id/kill', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot change social autopilot state.' });
+  const result = socialHandleManager.kill(req.params.id, req.body?.reason || 'Manual per-handle kill switch');
+  if (!result) return res.status(404).json({ error: 'Social handle not found' });
+  return res.json(result);
 });
 app.get('/api/social/summary', (_req, res) => res.json(socialMediaScheduler.summary()));
 app.get('/api/social/posts', (req, res) => res.json(socialMediaScheduler.list({ status: req.query.status, platform: req.query.platform }).map(socialPostView)));
