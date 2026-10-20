@@ -84,3 +84,19 @@ test('tool preflight requires the exact reader and publisher tools to exist on t
     await assert.rejects(f.manager.validateTools(handle.id), /was not found in the selected connector/);
   } finally { f.cleanup(); }
 });
+
+test('removing a handle disables it and cancels queued posts before deleting configuration', () => {
+  const f = fixture();
+  try {
+    const handle = f.manager.create({ platform: 'instagram', handle: '@softly1810' });
+    f.manager.update(handle.id, { connectorId: 'social', readTool: 'read_posts', publishTool: 'publish_post' });
+    f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' });
+    f.posts.push({ id: 'queued-to-remove', status: 'scheduled', targetAccounts: [{ platform: 'instagram', profileId: 'instagram:softly1810', handle: '@softly1810' }] });
+    const result = f.manager.remove(handle.id);
+    assert.equal(result.removed, true);
+    assert.equal(result.cancelledScheduledPosts, 1);
+    assert.equal(f.manager.get(handle.id), null);
+    assert.ok(f.cancelled.includes('queued-to-remove'));
+    assert.ok(f.manager.history().some((entry) => entry.type === 'social_handle_removed'));
+  } finally { f.cleanup(); }
+});
