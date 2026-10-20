@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import { JsonStore } from '../persistence/JsonStore.js';
 
 const PLATFORMS = new Set(['facebook', 'instagram', 'linkedin', 'x', 'tiktok', 'youtube', 'threads', 'other']);
-const STATUSES = new Set(['draft', 'scheduled', 'publishing', 'published', 'failed', 'cancelled']);
 
 function text(value, field, max) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(field + ' is required');
@@ -41,7 +40,7 @@ export class SocialMediaScheduler {
     return this._data().posts
       .filter((p) => !status || p.status === status)
       .filter((p) => !platform || p.platforms.includes(String(platform).toLowerCase()))
-      .sort((a, b) => String(a.scheduledAt ?? b.updatedAt).localeCompare(String(b.scheduledAt ?? a.updatedAt)))
+      .sort((a, b) => Date.parse(b.scheduledAt ?? b.updatedAt) - Date.parse(a.scheduledAt ?? a.updatedAt))
       .slice(0, Math.max(1, Math.min(500, Number(limit) || 200)));
   }
   get(id) { return this._data().posts.find((p) => p.id === id) ?? null; }
