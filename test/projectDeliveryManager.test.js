@@ -84,3 +84,16 @@ test('delivery project validation rejects invalid money, date, and unsupported a
     assert.throws(() => f.manager.transition(p.id, 'pretend_paid'), /Unsupported project action/);
   } finally { f.cleanup(); }
 });
+test('completed mission advances accepted project to quality review without claiming delivery or payment', () => {
+  const f = fixture();
+  try {
+    const p = f.manager.createFromOpportunity('opp-1', { scope: 'Build a website', deadline: '2026-11-01T12:00:00Z', quotedAmount: 80000 });
+    f.manager.transition(p.id, 'submit_proposal');
+    const accepted = f.manager.transition(p.id, 'confirm_client_acceptance', { evidence: 'Client email reference: msg-88' });
+    const synced = f.manager.syncMissionResult({ missionId: accepted.missionId, status: 'completed' });
+    assert.equal(synced.stage, 'quality_review');
+    assert.equal(synced.deliveryEvidence, '');
+    assert.equal(synced.paymentReference, '');
+    assert.equal(f.manager.summary().paid, 0);
+  } finally { f.cleanup(); }
+});
