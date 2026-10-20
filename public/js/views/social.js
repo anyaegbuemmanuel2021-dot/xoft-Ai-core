@@ -291,6 +291,7 @@ export async function render(container) {
       brandContext: $('social-handle-context').value.trim(),
     };
     $('social-handle-add').disabled = true;
+    const wasEditing = Boolean(editingHandleId);
     try {
       if (editingHandleId) {
         await api.patch('/api/social/handles/' + encodeURIComponent(editingHandleId), payload);
@@ -301,7 +302,7 @@ export async function render(container) {
       }
       resetHandleForm();
       await refreshHandles();
-      toast(editingHandleId ? 'Social handle updated' : 'Social handle added');
+      toast(wasEditing ? 'Social handle updated' : 'Social handle added');
     } catch (error) { setHandleFeedback('Could not save handle: ' + error.message); }
     finally { $('social-handle-add').disabled = false; }
   });
@@ -486,5 +487,6 @@ export async function render(container) {
       engagementFeedback('Item marked ignored.');
     } catch (error) { engagementFeedback('Could not update inbox item: ' + error.message); }
   });
+  refreshHandles().catch((error) => setHandleFeedback('Handles not available: ' + error.message));
   refreshEngagement().catch((error) => engagementFeedback('Inbox not available: ' + error.message));
 }
