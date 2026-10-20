@@ -24,6 +24,12 @@ export async function render(container) {
         <div class="row"><span class="main">Lost</span><strong>${summary.lost ?? 0}</strong></div>
         <p class="muted">Estimated value is not confirmed income. Mark work as won only when the opportunity is genuinely secured.</p>
       `)}
+      ${card('Discover public opportunities', `
+        <p class="muted">Search public web results for potential clients or paid projects. XOFT saves sourced results for review; it does not treat search snippets as verified clients or guaranteed income.</p>
+        <div class="form-row"><label for="opp-discover-query">What should XOFT look for?</label><input id="opp-discover-query" maxlength="300" placeholder="small businesses in Enugu looking for website development" /></div>
+        <button id="opp-discover" class="primary">Search and save leads</button>
+        <div id="opp-discover-result" class="muted" aria-live="polite"></div>
+      `)}
       ${card('Add opportunity', `
         <div class="form-row"><label for="opp-title">Opportunity / project *</label><input id="opp-title" maxlength="180" placeholder="Business website project" required /></div>
         <div class="form-row"><label for="opp-company">Company</label><input id="opp-company" maxlength="180" placeholder="Company or client" /></div>
@@ -66,6 +72,26 @@ export async function render(container) {
   };
   paintList();
   onDelegate(container, 'input', '#opp-search', (el) => paintList(el.value.trim()));
+  onDelegate(container, 'click', '#opp-discover', async () => {
+    const query = container.querySelector('#opp-discover-query').value.trim();
+    if (!query) { toast('Enter what you want XOFT to search for', 'warn'); return; }
+    const button = container.querySelector('#opp-discover');
+    button.disabled = true;
+    button.textContent = 'Searching…';
+    const result = await guarded(() => api.post('/api/opportunities/discover', { query, count: 5 }), 'Discover opportunities');
+    button.disabled = false;
+    button.textContent = 'Search and save leads';
+    if (result?.__queued) {
+      toast('Research needs a live connection; no results have been confirmed', 'warn');
+      return;
+    }
+    if (result && Array.isArray(result.saved)) {
+      const note = `Searched ${result.searched}; saved ${result.saved.length}; duplicates ${result.duplicates}; skipped ${result.skipped}. Review every source before outreach.`;
+      container.querySelector('#opp-discover-result').textContent = note;
+      toast(`Saved ${result.saved.length} sourced results for review`, 'ok');
+      render(container);
+    }
+  });
   onDelegate(container, 'click', '#opp-create', async () => {
     const value = container.querySelector('#opp-value').value;
     const followup = container.querySelector('#opp-followup').value;
