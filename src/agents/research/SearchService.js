@@ -1,6 +1,6 @@
 import { config } from '../../config/index.js';
 import puppeteer from 'puppeteer-core';
-import { SmartVerificationHandler } from './SmartVerificationHandler.js';
+import { classifyVerification, SmartVerificationHandler, VerificationChallengeError } from './SmartVerificationHandler.js';
 
 const BRAVE_BASE_URL = 'https://api.search.brave.com/res/v1/web/search';
 
@@ -119,6 +119,8 @@ export class SearchService {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const html = await res.text();
+        const rawChallenge = classifyVerification({ url: parsed.href, text: html.replace(/<[^>]+>/g, ' ').slice(0, 30000) });
+        if (rawChallenge) throw new VerificationChallengeError(rawChallenge, parsed.href);
         return html
           .replace(/<script[\s\S]*?<\/script>/gi, '')
           .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -128,6 +130,7 @@ export class SearchService {
           .replace(/\s+/g, ' ')
           .trim().slice(0, 12000);
       } catch (fallbackError) {
+        if (fallbackError?.code === 'XOFT_VERIFICATION_REQUIRED') throw fallbackError;
         throw new Error(`SearchService: Lightpanda and HTTP page retrieval both failed. Browser: ${browserError.message}. Fetch: ${fallbackError.message}`);
       }
     }
