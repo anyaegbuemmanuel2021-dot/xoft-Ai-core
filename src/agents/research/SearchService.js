@@ -1,5 +1,6 @@
 import { config } from '../../config/index.js';
 import puppeteer from 'puppeteer-core';
+import { SmartVerificationHandler } from './SmartVerificationHandler.js';
 
 const BRAVE_BASE_URL = 'https://api.search.brave.com/res/v1/web/search';
 
@@ -23,6 +24,15 @@ function lightpandaEndpoint() {
  * A configured Brave API remains an optional structured-search provider.
  */
 export class SearchService {
+  constructor() {
+    this.verification = new SmartVerificationHandler({ waitMs: config.browser.verificationWaitMs });
+  }
+
+  async navigateAndVerify(page, url, options = { waitUntil: 'domcontentloaded' }) {
+    await page.goto(url, options);
+    await this.verification.waitForNormalCheck(page);
+  }
+
   isConfigured() {
     return Boolean(config.search.braveApiKey) || config.browser.provider === 'lightpanda';
   }
@@ -45,6 +55,7 @@ export class SearchService {
         await page.close().catch(() => {});
       }
     } catch (err) {
+      if (err?.code === 'XOFT_VERIFICATION_REQUIRED') throw err;
       const hint = config.browser.token
         ? 'Check LPD_TOKEN, LIGHTPANDA_CLOUD_REGION, and your Lightpanda cloud access.'
         : 'Start Lightpanda CDP on LIGHTPANDA_CDP_URL or set LPD_TOKEN for Lightpanda Cloud.';
@@ -71,7 +82,7 @@ export class SearchService {
 
     return this.withBrowser(async (page) => {
       const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await this.navigateAndVerify(page, url, { waitUntil: 'domcontentloaded' });
       return page.evaluate((limit) => Array.from(document.querySelectorAll('.result'))
         .map((node) => {
           const link = node.querySelector('.result__a');
@@ -95,11 +106,12 @@ export class SearchService {
 
     try {
       const text = await this.withBrowser(async (page) => {
-        await page.goto(parsed.href, { waitUntil: 'domcontentloaded' });
+        await this.navigateAndVerify(page, parsed.href, { waitUntil: 'domcontentloaded' });
         return page.evaluate(() => (document.body?.innerText || document.documentElement?.innerText || '').replace(/\s+/g, ' ').trim());
       });
       return text.slice(0, 12000);
     } catch (browserError) {
+      if (browserError?.code === 'XOFT_VERIFICATION_REQUIRED') throw browserError;
       try {
         const res = await fetch(parsed.href, {
           headers: { 'User-Agent': 'XOFT-WebFetcher/1.0' },
