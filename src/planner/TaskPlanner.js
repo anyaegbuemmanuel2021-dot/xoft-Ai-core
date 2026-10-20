@@ -245,6 +245,10 @@ export class TaskPlanner {
         task = this._updateTask(taskId, (t) => ({ ...t, status: 'waiting_approval' }));
         break;
       }
+      if (stepResult.status === 'waiting_verification') {
+        task = this._updateTask(taskId, (t) => ({ ...t, status: 'waiting_verification', verificationRequiredAt: new Date().toISOString() }));
+        break;
+      }
       if (stepResult.status === 'failed') {
         task = this._updateTask(taskId, (t) => ({ ...t, status: 'failed', completedAt: new Date().toISOString() }));
         this.eventBus?.emitEvent(EventType.TASK_FAILED, { taskId, goal: task.goal });
@@ -357,6 +361,20 @@ export class TaskPlanner {
       return { status: 'completed', result };
     } catch (err) {
       this.executionRecordStore.complete(record.executionId, { status: 'failed', error: err.message });
+      if (err?.code === 'XOFT_VERIFICATION_REQUIRED') {
+        const challenge = {
+          type: String(err.challengeType || 'verification_required'),
+          url: /^https?:\\/\\//i.test(String(err.url || '')) ? String(err.url) : null,
+          humanRequired: Boolean(err.humanRequired),
+          message: String(err.message || 'A website verification is required.').slice(0, 1200),
+          detectedAt: new Date().toISOString(),
+        };
+        this._patchStep(taskId, step.id, { status: 'waiting_verification', error: challenge.message, verificationChallenge: challenge });
+        this._updateTask(taskId, (t) => ({ ...t, status: 'waiting_verification', verificationChallenge: { stepId: step.id, ...challenge } }));
+        this.activityLog.log({ type: 'task_verification_required', taskId, toolName: tool.name, detail: challenge });
+        this.eventBus?.emitEvent(EventType.TASK_VERIFICATION_REQUIRED, { taskId, stepId: step.id, toolName: tool.name, ...challenge });
+        return { status: 'waiting_verification', challenge };
+      }
       const attempts = (step.attempts ?? 0) + 1;
       this.activityLog.log({ type: 'tool_failed', taskId, toolName: tool.name, detail: { attempt: attempts, error: err.message } });
 
