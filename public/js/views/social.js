@@ -290,6 +290,7 @@ export async function render(container) {
     finally { $('social-handle-discover').disabled = false; }
   });
   $('social-handle-add').addEventListener('click', async () => {
+    if (!navigator.onLine) return setHandleFeedback('XOFT must be online to save social account settings. Nothing was saved.');
     const handle = $('social-handle-name').value.trim();
     if (!handle) return setHandleFeedback('Enter the social handle or profile URL first.');
     const payload = {
@@ -379,7 +380,8 @@ export async function render(container) {
       if (!navigator.onLine) { setHandleFeedback('XOFT must be online to change this handle\'s autonomy state.'); return; }
       if (item.autoEnabled) {
         try {
-          await api.post('/api/social/handles/' + encodeURIComponent(id) + '/autonomy', { enabled: false });
+          const result = await api.post('/api/social/handles/' + encodeURIComponent(id) + '/autonomy', { enabled: false });
+          if (result?.__queued) { setHandleFeedback('Pause not confirmed: request queued offline. Reconnect and try again.'); return; }
           await refreshHandles();
           setHandleFeedback('Autonomy paused for ' + item.handle + '. Use the KILL button for emergency stop and queue cancellation.');
         } catch (error) { setHandleFeedback('Could not pause autonomy: ' + error.message); }
@@ -397,6 +399,7 @@ export async function render(container) {
       return;
     }
     if (action === 'learn' || action === 'run') {
+      if (!navigator.onLine) { setHandleFeedback('XOFT must be online to access this account connector. No action was run.'); return; }
       button.disabled = true;
       setHandleFeedback(action === 'learn' ? 'Reading recent posts and learning the account style…' : 'Running autonomous content cycle…');
       try {
