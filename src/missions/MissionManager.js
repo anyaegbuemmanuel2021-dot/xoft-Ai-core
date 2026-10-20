@@ -25,6 +25,7 @@ export class MissionManager {
     this.emergencyStop = emergencyStop;
     this.now = now;
     this._store = new JsonStore({ dataDir, fileName: 'missions.json', kvKey: 'missions', defaultValue: { missions: [] }, sqliteStore });
+    this._running = new Set();
   }
 
   _load() { return this._store.load(); }
@@ -75,35 +76,41 @@ export class MissionManager {
   }
 
   async run(id) {
-    if (this.emergencyStop?.isActive?.()) throw new Error('Emergency stop is active');
-    let m = this._norm(this.get(id));
-    if (m.status === 'cancelled') throw new Error('Mission is cancelled');
-    if (m.status === 'paused') throw new Error(`Mission is paused (${m.pausedReason ?? 'no reason'}); resume it first`);
-
-    const b = this.budgetState(m);
-    if (b.exhausted) { this._pause(id, `budget_exhausted: ${b.exhausted}`); throw new Error(`Mission budget exhausted — ${b.exhausted}. Resume with an extended budget to continue.`); }
-    if (this.isStuck(m)) { this._pause(id, 'stuck: same failure repeated'); throw new Error('Mission is stuck (same failure repeated). Paused for review/replan.'); }
-
-    if (!m.taskId) m = this._norm(await this.plan(id));
-    const started = this.now();
-    let status; let error = null;
+    if (this._running.has(id)) throw new Error('Mission is already running');
+    this._running.add(id);
     try {
-      const t = await this.taskPlanner.execute(m.taskId);
-      status = t.status;
-      error = t.error ?? t.blockedReason ?? (FAILED.has(t.status) ? t.status : null);
-    } catch (err) {
-      status = 'failed'; error = err.message;
+      if (this.emergencyStop?.isActive?.()) throw new Error('Emergency stop is active');
+      let m = this._norm(this.get(id));
+      if (m.status === 'cancelled') throw new Error('Mission is cancelled');
+      if (m.status === 'paused') throw new Error(`Mission is paused (${m.pausedReason ?? 'no reason'}); resume it first`);
+
+      const b = this.budgetState(m);
+      if (b.exhausted) { this._pause(id, `budget_exhausted: ${b.exhausted}`); throw new Error(`Mission budget exhausted — ${b.exhausted}. Resume with an extended budget to continue.`); }
+      if (this.isStuck(m)) { this._pause(id, 'stuck: same failure repeated'); throw new Error('Mission is stuck (same failure repeated). Paused for review/replan.'); }
+
+      if (!m.taskId) m = this._norm(await this.plan(id));
+      const started = this.now();
+      let status; let error = null;
+      try {
+        const t = await this.taskPlanner.execute(m.taskId);
+        status = t.status;
+        error = t.error ?? t.blockedReason ?? (FAILED.has(t.status) ? t.status : null);
+      } catch (err) {
+        status = 'failed'; error = err.message;
+      }
+      const failed = FAILED.has(status);
+      const fresh = this._norm(this.get(id));
+      const entry = { ts: new Date(this.now()).toISOString(), status, failed, signature: failed ? `${status}:${String(error ?? '').slice(0, 120)}` : null, error: failed ? String(error ?? '').slice(0, 200) : null };
+      const out = this._patch(id, {
+        status,
+        usage: { runs: fresh.usage.runs + 1, failures: fresh.usage.failures + (failed ? 1 : 0), runtimeMs: fresh.usage.runtimeMs + (this.now() - started) },
+        history: [...fresh.history, entry].slice(-HISTORY_LIMIT),
+      });
+      this.eventBus?.emitEvent('mission.run', { missionId: id, status, failed });
+      return this._norm(out);
+    } finally {
+      this._running.delete(id);
     }
-    const failed = FAILED.has(status);
-    const fresh = this._norm(this.get(id));
-    const entry = { ts: new Date(this.now()).toISOString(), status, failed, signature: failed ? `${status}:${String(error ?? '').slice(0, 120)}` : null, error: failed ? String(error ?? '').slice(0, 200) : null };
-    const out = this._patch(id, {
-      status,
-      usage: { runs: fresh.usage.runs + 1, failures: fresh.usage.failures + (failed ? 1 : 0), runtimeMs: fresh.usage.runtimeMs + (this.now() - started) },
-      history: [...fresh.history, entry].slice(-HISTORY_LIMIT),
-    });
-    this.eventBus?.emitEvent('mission.run', { missionId: id, status, failed });
-    return this._norm(out);
   }
 
   _pause(id, reason) {
