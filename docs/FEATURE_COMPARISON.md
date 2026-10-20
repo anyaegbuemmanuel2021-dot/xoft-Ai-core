@@ -91,6 +91,11 @@ Status key:
 | 60 | Opportunity pipeline (persistent lead tracking + public search discovery) | PARTIAL — code and dashboard added; full CI/live search not yet verified | reachable `search_web` integration for discovery | `src/business/OpportunityStore.js`, `POST /api/opportunities/discover`, `public/js/views/opportunities.js` |
 | 61 | Persistent mission autopilot (deadline/priority-ranked background execution) | PARTIAL — scheduler/API/dashboard/tests added; runtime and full CI not yet verified; opt-in and disabled by default | healthy AI provider, hosted process, and missions in `created` or `planned` state; existing approvals/permissions remain enforced | `src/scheduler/MissionAutopilot.js`, `public/js/views/missions.js` |
 | 62 | Project delivery lifecycle (proposal, acceptance evidence, QA, handoff, invoice/payment evidence) | PARTIAL — persistent manager, protected API routes, dashboard, mission-to-QA event sync, and tests added; full suite/deployment not verified | `src/business/ProjectDeliveryManager.js`, `/api/delivery/*`, `public/js/views/delivery.js`; external client contact, real deployment, invoicing delivery, and payment confirmation still require real integrations/evidence |
+| 63 | Consent-gated WhatsApp follow-up send endpoint | PARTIAL — requires admin auth, saved WhatsApp contact channel, configured Cloud API, approver name, and opt-in evidence; only provider acceptance is reported | `POST /api/opportunities/follow-up-drafts/:id/send-whatsapp`; delivery/read receipt is not inferred; plain text may be restricted by WhatsApp's customer-service window |
+
+## WhatsApp follow-up sending verification note
+
+The backend can send an already-created follow-up draft through the configured official WhatsApp Cloud API only after an authenticated admin submits approver identity and evidence of recipient opt-in. It uses the opportunity's saved WhatsApp number/channel, does not scrape or guess recipients, and reports provider acceptance separately from delivery/read receipts. No live credentials or actual outbound message have been tested. A dashboard send button was not added, so this endpoint is not currently exposed as a one-click UI workflow.
 
 ## Project delivery verification note
 
