@@ -137,7 +137,7 @@ export class ProjectDeliveryManager {
       '- Keep credentials out of source files and logs.',
       '- Do not send external messages or accept new commercial terms without explicit approval.',
       '',
-    ].join('\\n');
+    ].join('\n');
     fs.writeFileSync(path.join(workspacePath, 'PROJECT_BRIEF.md'), brief, { encoding: 'utf8', flag: 'w', mode: 0o600 });
   }
 
