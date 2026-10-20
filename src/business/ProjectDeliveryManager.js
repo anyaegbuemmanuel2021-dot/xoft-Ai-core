@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { JsonStore } from '../persistence/JsonStore.js';
 
 const STAGES = Object.freeze([
@@ -90,11 +92,52 @@ function proposalFor(project) {
 export class ProjectDeliveryManager {
   constructor({ dataDir = './data', sqliteStore = null, opportunityStore, missionManager, activityLog, eventBus, now = () => new Date() } = {}) {
     this.store = new JsonStore({ dataDir, fileName: 'project-delivery.json', kvKey: 'project-delivery', defaultValue: { projects: [] }, sqliteStore });
+    this.workspaceRoot = path.resolve(dataDir, 'client-workspaces');
+    fs.mkdirSync(this.workspaceRoot, { recursive: true });
     this.opportunityStore = opportunityStore;
     this.missionManager = missionManager;
     this.activityLog = activityLog;
     this.eventBus = eventBus;
     this.now = now;
+  }
+
+  _writeBrief(project) {
+    const workspacePath = project.workspacePath;
+    if (!workspacePath || path.dirname(path.resolve(workspacePath)) !== this.workspaceRoot) throw new Error('Project workspace path is outside the configured workspace root');
+    fs.mkdirSync(workspacePath, { recursive: true });
+    const brief = [
+      '# Client Project Brief',
+      '',
+      '## Project',
+      project.title,
+      '',
+      '## Client',
+      project.clientName || project.company || 'To be confirmed',
+      '',
+      '## Scope',
+      project.scope || project.service || 'Confirm scope before implementation.',
+      '',
+      '## Deliverables',
+      ...(project.deliverables?.length ? project.deliverables.map((item) => '- ' + item) : ['- Confirm deliverables before implementation.']),
+      '',
+      '## Deadline',
+      project.deadline || 'To be agreed',
+      '',
+      '## Quote',
+      project.quotedAmount == null ? 'Not set' : String(project.quotedAmount) + ' ' + (project.currency || DEFAULT_CURRENCY),
+      '',
+      '## Source',
+      project.sourceUrl || 'Not provided',
+      '',
+      '## Execution rules',
+      '- Inspect the repository and requirements before changing files.',
+      '- Build and test the deliverables; report exact commands and results.',
+      '- Never claim a build, deployment, delivery, or payment succeeded without verifiable evidence.',
+      '- Keep credentials out of source files and logs.',
+      '- Do not send external messages or accept new commercial terms without explicit approval.',
+      '',
+    ].join('\\n');
+    fs.writeFileSync(path.join(workspacePath, 'PROJECT_BRIEF.md'), brief, { encoding: 'utf8', flag: 'w', mode: 0o600 });
   }
 
   _load() { const d = this.store.load(); return Array.isArray(d.projects) ? d.projects : []; }
@@ -131,9 +174,11 @@ export class ProjectDeliveryManager {
       deadline: patch.deadline ?? null, quotedAmount: patch.quotedAmount ?? null, currency: patch.currency || DEFAULT_CURRENCY,
       deliverables: patch.deliverables ?? [], notes: patch.notes || '',
       stage: 'proposal_draft', proposalText: '', invoiceText: '', missionId: null, acceptanceEvidence: '', deliveryEvidence: '', previousStage: null,
+      workspacePath: path.join(this.workspaceRoot, crypto.randomUUID()),
       invoiceReference: '', paymentReference: '', createdAt: ts, updatedAt: ts, history: [],
     };
     project.proposalText = proposalFor(project);
+    this._writeBrief(project);
     project.history.push({ at: ts, stage: project.stage, note: 'Created a draft from a researched opportunity. No client contact or contract acceptance has occurred.' });
     const all = this._load(); all.push(project); this._save(all); this._emit('project_created', project);
     return project;
@@ -143,7 +188,10 @@ export class ProjectDeliveryManager {
     if (CLOSED.has(current.stage)) throw new Error('Closed project cannot be edited');
     const patch = normalizePatch(input);
     const next = { ...current, ...patch, updatedAt: this.now().toISOString() };
-    if ('scope' in patch || 'deadline' in patch || 'quotedAmount' in patch || 'currency' in patch || 'deliverables' in patch || 'clientName' in patch) next.proposalText = proposalFor(next);
+    if ('scope' in patch || 'deadline' in patch || 'quotedAmount' in patch || 'currency' in patch || 'deliverables' in patch || 'clientName' in patch) {
+      next.proposalText = proposalFor(next);
+      this._writeBrief(next);
+    }
     this._replace(next, 'Project details updated.');
     return next;
   }
@@ -186,7 +234,7 @@ export class ProjectDeliveryManager {
       if (!evidence) throw new Error('Record how the client accepted (for example, message reference or written confirmation)');
       next.acceptanceEvidence = evidence;
       next.stage = 'accepted';
-      const mission = this.missionManager.create('Deliver client project: ' + p.title + '. Scope: ' + p.scope + '. Deliverables: ' + (p.deliverables.join('; ') || 'as agreed with client') + '. Deadline: ' + p.deadline + '. Build, test, and prepare delivery artifacts; do not claim deployment or payment unless verified.', { deadline: p.deadline, priority: 5, budget: { maxRuns: 5, maxFailures: 3 } });
+      const mission = this.missionManager.create('Deliver client project: ' + p.title + '. Scope: ' + p.scope + '. Deliverables: ' + (p.deliverables.join('; ') || 'as agreed with client') + '. Deadline: ' + p.deadline + '. Work in this project workspace: ' + p.workspacePath + ' (read PROJECT_BRIEF.md first). Build, test, and prepare delivery artifacts; report exact verification results; do not claim deployment or payment unless verified.', { deadline: p.deadline, priority: 5, budget: { maxRuns: 5, maxFailures: 3 } });
       next.missionId = mission.id;
       this.opportunityStore.update(p.opportunityId, { stage: 'won', nextAction: 'Delivery project accepted; track the linked mission and payment status.' });
     } else if (action === 'start_work') {
