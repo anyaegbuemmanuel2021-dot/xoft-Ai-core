@@ -145,5 +145,4 @@ buildSidebar();
 wireConnectivity();
 registerServiceWorker();
 wsConnect();
-registerRoute('social', social);
 startRouter();
