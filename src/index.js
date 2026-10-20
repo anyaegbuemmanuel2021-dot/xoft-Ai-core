@@ -87,6 +87,7 @@ import { KillSwitch } from './security/KillSwitch.js';
 import { ProactiveEngine } from './proactive/ProactiveEngine.js';
 import { MissionManager } from './missions/MissionManager.js';
 import { OpportunityStore } from './business/OpportunityStore.js';
+import { ProjectDeliveryManager } from './business/ProjectDeliveryManager.js';
 import { OpportunityFollowUpPlanner } from './business/OpportunityFollowUpPlanner.js';
 import { scoreOpportunity } from './business/OpportunityScorer.js';
 import { BriefingScheduler } from './proactive/BriefingScheduler.js';
@@ -253,6 +254,7 @@ const executiveBrain = new ExecutiveBrain({
 
 const channelGateway = new ChannelGateway({ executiveBrain, activityLog, address });
 const missionManager = new MissionManager({ taskPlanner, activityLog, eventBus, dataDir: config.memory.dataDir, emergencyStop, sqliteStore: durableStore });
+const projectDeliveryManager = new ProjectDeliveryManager({ dataDir: config.memory.dataDir, sqliteStore: durableStore, opportunityStore, missionManager, activityLog, eventBus });
 const briefingScheduler = new BriefingScheduler({
   dataDir: config.memory.dataDir,
   sqliteStore: durableStore,
@@ -638,6 +640,40 @@ app.patch('/api/opportunities/:id', (req, res) => {
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
+});
+
+// --- Project delivery lifecycle: opportunity -> proposal -> acceptance -> delivery -> invoice -> verified payment ---
+app.get('/api/delivery/summary', (_req, res) => res.json(projectDeliveryManager.summary()));
+app.get('/api/delivery/projects', (req, res) => res.json(projectDeliveryManager.list({ stage: req.query.stage, q: req.query.q })));
+app.get('/api/delivery/projects/:id', (req, res) => {
+  const project = projectDeliveryManager.get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Delivery project not found' });
+  return res.json(project);
+});
+app.post('/api/delivery/projects/from-opportunity', (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot create client delivery projects.' });
+  try {
+    const opportunityId = String(req.body?.opportunityId ?? '').trim();
+    if (!opportunityId) return res.status(400).json({ error: 'opportunityId is required' });
+    return res.status(201).json(projectDeliveryManager.createFromOpportunity(opportunityId, req.body?.project ?? {}));
+  } catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.patch('/api/delivery/projects/:id', (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot edit client delivery projects.' });
+  try {
+    const project = projectDeliveryManager.update(req.params.id, req.body ?? {});
+    if (!project) return res.status(404).json({ error: 'Delivery project not found' });
+    return res.json(project);
+  } catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.post('/api/delivery/projects/:id/actions', (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot change client delivery or payment status.' });
+  try {
+    const action = String(req.body?.action ?? '');
+    const project = projectDeliveryManager.transition(req.params.id, action, req.body ?? {});
+    if (!project) return res.status(404).json({ error: 'Delivery project not found' });
+    return res.json(project);
+  } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 
 app.post('/api/missions', (req, res) => { const { goal, autonomyLevel, deadline, budget, priority } = req.body ?? {}; if (!goal) return res.status(400).json({ error: 'goal is required' }); res.json(missionManager.create(goal, { autonomyLevel, deadline, budget, priority })); });
