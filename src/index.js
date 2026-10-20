@@ -14,6 +14,7 @@ import { aiErrorToHttp } from './providers/errors.js';
 import { validateModelChoice } from './providers/modelCatalog.js';
 import * as privacyClassifier from './privacy/PrivacyClassifier.js';
 import { MissionScheduler } from './scheduler/MissionScheduler.js';
+import { MissionAutopilot } from './scheduler/MissionAutopilot.js';
 import { Watchdog } from './watchdog/Watchdog.js';
 import { EngineRegistry } from './engines/EngineRegistry.js';
 import { EngineRouter } from './engines/EngineRouter.js';
@@ -487,6 +488,29 @@ const missionScheduler = new MissionScheduler({
     const configured = router.configuredProviders();
     return configured.length > 0 && configured.some((n) => modelHealth.isHealthy(n));
   },
+});
+const missionAutopilot = new MissionAutopilot({
+  missionScheduler,
+  emergencyStop,
+  dataDir: config.memory.dataDir,
+  sqliteStore: durableStore,
+  activityLog,
+  eventBus,
+});
+missionAutopilot.start();
+app.get('/api/autopilot/status', (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot change mission autopilot settings.' });
+  res.json(missionAutopilot.status());
+});
+app.patch('/api/autopilot/settings', (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot change mission autopilot settings.' });
+  try { res.json(missionAutopilot.update(req.body ?? {})); }
+  catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.post('/api/autopilot/run', async (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot start the mission autopilot.' });
+  try { res.json(await missionAutopilot.runNow()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
 });
 // Registered BEFORE /api/missions/:id (Express matches in order) so "next" and "run-batch" are not read as ids.
 app.get('/api/missions/next', (_req, res) => res.json({ next: missionScheduler.next({ emergency: emergencyStop.isActive() }), ...missionScheduler.rank({ emergency: emergencyStop.isActive() }) }));
