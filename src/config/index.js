@@ -97,6 +97,7 @@ export const config = {
     token: required('LPD_TOKEN', ''),
     cloudRegion: required('LIGHTPANDA_CLOUD_REGION', 'euwest'),
     timeoutMs: Math.max(1000, Number(required('LIGHTPANDA_TIMEOUT_MS', 30000))),
+    verificationWaitMs: Math.max(0, Number(required('VERIFICATION_WAIT_MS', 10000))),
   },
 
   voice: {
