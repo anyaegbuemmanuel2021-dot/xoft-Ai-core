@@ -8,6 +8,12 @@ A JARVIS-style personal AI assistant backend with real persistence, tool executi
 
 Start with **`docs/FEATURE_COMPARISON.md`** for a one-page table of implemented features, features needing credentials/connectors, and capabilities outside the backend's reach. This file is the setup guide.
 
+### Social Studio: multi-account autopilot
+
+The **Social Studio** dashboard supports multiple social handles, per-account style learning, autonomous post generation/scheduling, a comments-and-DM inbox, and a separate **KILL THIS HANDLE** button for every registered account. Setup instructions, connector tool requirements, kill-switch behavior, and live-integration limitations are documented in **`docs/SOCIAL_STUDIO.md`**.
+
+Important: adding a handle does not log into the platform. For each account, configure an authorized connector that can read that account's posts and publish to that same account. Autopilot starts OFF; enabling it requires explicit owner confirmation. A passing CI run validates the code/tests, not a live post on Instagram/Facebook/LinkedIn/X/TikTok.
+
 ---
 
 ## 1. Requirements
