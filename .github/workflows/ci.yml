@@ -13,6 +13,9 @@ jobs:
       - run: node --check test/briefingScheduler.test.js
       - run: node --check test/projectDeliveryIntegration.test.js
       - run: node --check test/projectDeliveryManager.test.js
+      - run: node --check src/social/SocialMediaScheduler.js
+      - run: node --check test/socialMediaScheduler.test.js
+      - run: node --check public/js/views/social.js
       - run: node --check src/business/OpportunityScorer.js
       - run: node --check src/index.js
       - run: node --check src/scheduler/MissionAutopilot.js
