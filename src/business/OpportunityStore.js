@@ -17,7 +17,7 @@ export const OPPORTUNITY_STAGES = Object.freeze([
 const EDITABLE_FIELDS = new Set([
   'title', 'company', 'contactName', 'contactEmail', 'contactPhone', 'sourceUrl',
   'service', 'fitRationale', 'evidence', 'estimatedValue', 'costEstimate',
-  'nextAction', 'nextFollowUpAt', 'stage', 'notes', 'contactChannel',
+  'nextAction', 'nextFollowUpAt', 'stage', 'notes', 'contactChannel', 'priorityScore', 'priority', 'riskFlags', 'recommendedAction',
 ]);
 
 function cleanText(value, field, max = 2000) {
