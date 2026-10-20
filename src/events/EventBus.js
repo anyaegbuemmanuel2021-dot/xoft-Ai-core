@@ -31,6 +31,7 @@ export const EventType = {
   TASK_QUEUED: 'task.queued',
   TASK_STARTED: 'task.started',
   TASK_VERIFYING: 'task.verifying',
+  TASK_VERIFICATION_REQUIRED: 'task.verification_required',
   TASK_RETRYING: 'task.retrying',
   TASK_RECOVERING: 'task.recovering',
   TASK_CANCELLED: 'task.cancelled',
