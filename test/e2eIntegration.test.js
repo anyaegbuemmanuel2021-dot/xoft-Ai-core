@@ -58,10 +58,19 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
  * way: it fails loudly and clearly if delivery is truly broken, and doesn't
  * flake on a slow-but-working environment.
  */
-function waitForMessage(ws, timeoutMs = 40000) {
+function waitForMessage(ws, timeoutMs = 40000, predicate = () => true) {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`no WS message received within ${timeoutMs}ms`)), timeoutMs);
-    ws.once('message', (m) => { clearTimeout(t); resolve(m); });
+    const t = setTimeout(() => {
+      ws.off('message', onMessage);
+      reject(new Error(`no matching WS message received within ${timeoutMs}ms`));
+    }, timeoutMs);
+    const onMessage = (message) => {
+      if (!predicate(message)) return;
+      clearTimeout(t);
+      ws.off('message', onMessage);
+      resolve(message);
+    };
+    ws.on('message', onMessage);
   });
 }
 
@@ -101,7 +110,7 @@ describe('device lifecycle + scoped memory + realtime + revocation', { concurren
       });
       await waitForMessage(ws);
 
-      const nextEvent = waitForMessage(ws).then((m) => JSON.parse(m.toString()));
+      const nextEvent = waitForMessage(ws, 40000, (message) => { try { return JSON.parse(message.toString()).type === 'emergency_stop_activated'; } catch { return false; } }).then((m) => JSON.parse(m.toString()));
       const stopRes = await server.call('POST', '/api/emergency-stop/activate', { reason: 'e2e ws check' });
       assert.equal(stopRes.status, 200);
       const event = await nextEvent;
