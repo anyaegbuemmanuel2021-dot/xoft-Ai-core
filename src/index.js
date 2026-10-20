@@ -669,20 +669,21 @@ app.patch('/api/opportunities/:id', (req, res) => {
   }
 });
 
+const deliveryProjectView = (project) => { if (!project) return project; const { workspacePath, ...safe } = project; return safe; };
 // --- Project delivery lifecycle: opportunity -> proposal -> acceptance -> delivery -> invoice -> verified payment ---
 app.get('/api/delivery/summary', (_req, res) => res.json(projectDeliveryManager.summary()));
-app.get('/api/delivery/projects', (req, res) => res.json(projectDeliveryManager.list({ stage: req.query.stage, q: req.query.q })));
+app.get('/api/delivery/projects', (req, res) => res.json(projectDeliveryManager.list({ stage: req.query.stage, q: req.query.q }).map(deliveryProjectView)));
 app.get('/api/delivery/projects/:id', (req, res) => {
   const project = projectDeliveryManager.get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Delivery project not found' });
-  return res.json(project);
+  return res.json(deliveryProjectView(project));
 });
 app.post('/api/delivery/projects/from-opportunity', (req, res) => {
   if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot create client delivery projects.' });
   try {
     const opportunityId = String(req.body?.opportunityId ?? '').trim();
     if (!opportunityId) return res.status(400).json({ error: 'opportunityId is required' });
-    return res.status(201).json(projectDeliveryManager.createFromOpportunity(opportunityId, req.body?.project ?? {}));
+    return res.status(201).json(deliveryProjectView(projectDeliveryManager.createFromOpportunity(opportunityId, req.body?.project ?? {})));
   } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 app.patch('/api/delivery/projects/:id', (req, res) => {
@@ -690,7 +691,7 @@ app.patch('/api/delivery/projects/:id', (req, res) => {
   try {
     const project = projectDeliveryManager.update(req.params.id, req.body ?? {});
     if (!project) return res.status(404).json({ error: 'Delivery project not found' });
-    return res.json(project);
+    return res.json(deliveryProjectView(project));
   } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 app.post('/api/delivery/projects/:id/actions', (req, res) => {
@@ -699,7 +700,7 @@ app.post('/api/delivery/projects/:id/actions', (req, res) => {
     const action = String(req.body?.action ?? '');
     const project = projectDeliveryManager.transition(req.params.id, action, req.body ?? {});
     if (!project) return res.status(404).json({ error: 'Delivery project not found' });
-    return res.json(project);
+    return res.json(deliveryProjectView(project));
   } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 
