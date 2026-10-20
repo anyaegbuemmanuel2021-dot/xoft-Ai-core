@@ -235,7 +235,7 @@ export class ProjectDeliveryManager {
       if (!evidence) throw new Error('Record how the client accepted (for example, message reference or written confirmation)');
       next.acceptanceEvidence = evidence;
       next.stage = 'accepted';
-      const mission = this.missionManager.create('Deliver client project: ' + p.title + '. Scope: ' + p.scope + '. Deliverables: ' + (p.deliverables.join('; ') || 'as agreed with client') + '. Deadline: ' + p.deadline + '.\\n\\n' + buildDeliverySkillBrief(p), { deadline: p.deadline, priority: 5, budget: { maxRuns: 5, maxFailures: 3 } });
+      const mission = this.missionManager.create('Deliver client project: ' + p.title + '. Scope: ' + p.scope + '. Deliverables: ' + (p.deliverables.join('; ') || 'as agreed with client') + '. Deadline: ' + p.deadline + '.\n\n' + buildDeliverySkillBrief(p), { deadline: p.deadline, priority: 5, budget: { maxRuns: 5, maxFailures: 3 } });
       next.missionId = mission.id;
       this.opportunityStore.update(p.opportunityId, { stage: 'won', nextAction: 'Delivery project accepted; track the linked mission and payment status.' });
     } else if (action === 'start_work') {
