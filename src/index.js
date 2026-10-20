@@ -86,6 +86,7 @@ import { KillSwitch } from './security/KillSwitch.js';
 import { ProactiveEngine } from './proactive/ProactiveEngine.js';
 import { MissionManager } from './missions/MissionManager.js';
 import { OpportunityStore } from './business/OpportunityStore.js';
+import { BriefingScheduler } from './proactive/BriefingScheduler.js';
 import { RecoveryEngine } from './recovery/RecoveryEngine.js';
 import { ContextEngine } from './context/ContextEngine.js';
 import { VisionInterpreter } from './vision/VisionInterpreter.js';
@@ -247,6 +248,41 @@ const executiveBrain = new ExecutiveBrain({
 
 const channelGateway = new ChannelGateway({ executiveBrain, activityLog, address });
 const missionManager = new MissionManager({ taskPlanner, activityLog, eventBus, dataDir: config.memory.dataDir, emergencyStop, sqliteStore: durableStore });
+const briefingScheduler = new BriefingScheduler({
+  dataDir: config.memory.dataDir,
+  sqliteStore: durableStore,
+  twilioService,
+  activityLog,
+  eventBus,
+  summaryProvider: async ({ type, date, timezone }) => {
+    const tasks = taskPlanner.list();
+    const missions = missionManager.list();
+    const opportunities = opportunityStore.list({ limit: 100 });
+    const activities = activityLog.all().filter((entry) => String(entry.ts ?? '').startsWith(date));
+    const taskCounts = {
+      total: tasks.length,
+      active: tasks.filter((task) => !['completed', 'cancelled'].includes(task.status)).length,
+      completed: tasks.filter((task) => task.status === 'completed').length,
+      failed: tasks.filter((task) => ['failed', 'timed_out', 'blocked'].includes(task.status)).length,
+    };
+    const activeMissions = missions.filter((mission) => !['completed', 'cancelled'].includes(mission.status));
+    const followUps = opportunities.filter((item) => item.nextFollowUpAt && Date.parse(item.nextFollowUpAt) <= Date.now() && !['won', 'lost'].includes(item.stage));
+    const recent = activities.slice(-8).map((entry) => String(entry.type ?? 'activity').replaceAll('_', ' '));
+    const heading = type === 'morning' ? 'Good morning, sir. Here is your XOFT briefing.' : 'Good evening, sir. Here is your XOFT wrap-up.';
+    const lines = [
+      heading,
+      `Date: ${date} (${timezone})`,
+      `Tasks: ${taskCounts.active} active, ${taskCounts.completed} completed, ${taskCounts.failed} failed/blocked.`,
+      `Missions needing attention: ${activeMissions.length}.`,
+      `Opportunity pipeline: ${opportunities.length} leads; ${opportunityStore.summary().followUpsDue} follow-ups due.`,
+      followUps.length ? `Follow-up priorities: ${followUps.slice(0, 3).map((item) => item.company || item.title).join(', ')}.` : 'No overdue opportunity follow-ups found.',
+      recent.length ? `Recent activity: ${recent.join('; ')}.` : 'No activity was logged for this date yet.',
+      'XOFT reports recorded system state; check the dashboard for full details and verify any payment or delivery claims.',
+    ];
+    return { text: lines.join(' ').slice(0, 3400), generatedAt: new Date().toISOString() };
+  },
+});
+briefingScheduler.start();
 const proactiveEngine = new ProactiveEngine({ worldState, eventBus, activityLog, deviceManager });
 proactiveEngine.start();
 
@@ -490,6 +526,32 @@ app.post('/api/opportunities/discover', async (req, res) => {
     activityLog.log({ type: 'opportunity_discovery_failed', detail: { query, error: err.message } });
     return res.status(502).json({ error: err.message, note: 'Web research is unavailable until the configured browser/search integration is reachable.' });
   }
+});
+app.get('/api/briefings', (_req, res) => res.json(briefingScheduler.status()));
+app.patch('/api/briefings/settings', (req, res) => {
+  try { return res.json(briefingScheduler.updateSettings(req.body ?? {})); }
+  catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.post('/api/briefings/preview', async (_req, res) => {
+  try {
+    const status = briefingScheduler.status();
+    const tasks = taskPlanner.list();
+    const missions = missionManager.list();
+    const opportunities = opportunityStore.list({ limit: 100 });
+    const summary = opportunityStore.summary();
+    const recent = activityLog.all().slice(-8).map((entry) => String(entry.type ?? 'activity').replaceAll('_', ' '));
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      settings: status.settings,
+      preview: [
+        `XOFT briefing preview — ${new Date().toLocaleString('en-GB', { timeZone: status.settings.timezone })}`,
+        `Tasks: ${tasks.filter((task) => !['completed', 'cancelled'].includes(task.status)).length} active; ${tasks.filter((task) => task.status === 'completed').length} completed.`,
+        `Missions needing attention: ${missions.filter((mission) => !['completed', 'cancelled'].includes(mission.status)).length}.`,
+        `Opportunities: ${opportunities.length}; follow-ups due: ${summary.followUpsDue}.`,
+        `Recent activity: ${recent.join('; ') || 'none logged'}.`,
+      ].join(' '),
+    });
+  } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 app.get('/api/opportunities/summary', (_req, res) => res.json(opportunityStore.summary()));
 app.get('/api/opportunities', (req, res) => {
