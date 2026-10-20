@@ -84,6 +84,19 @@ export class SocialHandleManager {
     next.updatedAt = this.now().toISOString();
     return this._saveHandle(next);
   }
+  async validateTools(id) {
+    const current = this.get(id);
+    if (!current) throw new Error('Social handle not found');
+    if (!current.connectorId || !current.readTool || !current.publishTool) throw new Error('Set the connector, content-reading tool and publishing tool first.');
+    if (typeof this.connectorManager?.discover !== 'function') throw new Error('The connector does not support tool discovery; XOFT cannot verify the configured tool names.');
+    const discovered = await this.connectorManager.discover(current.connectorId);
+    const root = discovered?.result ?? discovered;
+    const listed = Array.isArray(root) ? root : Array.isArray(root?.tools) ? root.tools : Array.isArray(root?.result?.tools) ? root.result.tools : [];
+    const names = listed.map((tool) => typeof tool === 'string' ? tool : tool?.name).filter(Boolean);
+    if (!names.includes(current.readTool)) throw new Error('Content-reading tool "' + current.readTool + '" was not found in the selected connector. Discover tools and choose the exact name.');
+    if (!names.includes(current.publishTool)) throw new Error('Publishing tool "' + current.publishTool + '" was not found in the selected connector. Discover tools and choose the exact name.');
+    return { valid: true, connectorId: current.connectorId, readTool: current.readTool, publishTool: current.publishTool, availableTools: names.length };
+  }
   setAutonomy(id, enabled, { confirmedBy } = {}) {
     const current = this.get(id);
     if (!current) return null;
