@@ -153,6 +153,22 @@ export class ProjectDeliveryManager {
     next.history = [...(next.history ?? []), { at: this.now().toISOString(), stage: next.stage, note: String(note).slice(0, 1000) }].slice(-100);
     all[i] = next; this._save(all); this._emit('project_updated', next);
   }
+  syncMissionResult({ missionId, status, error } = {}) {
+    if (!missionId || !status) return null;
+    const project = this._load().find((p) => p.missionId === missionId);
+    if (!project || CLOSED.has(project.stage)) return null;
+    if (status === 'completed' && ['accepted', 'in_progress'].includes(project.stage)) {
+      const next = { ...project, stage: 'quality_review', updatedAt: this.now().toISOString() };
+      this._replace(next, 'Linked mission completed. Project moved to quality review; delivery still requires explicit evidence and approval.');
+      this.eventBus?.emitEvent('delivery.quality_review_ready', { projectId: project.id, missionId });
+      return this.get(project.id);
+    }
+    if (['failed', 'blocked', 'timed_out'].includes(status)) {
+      this.activityLog?.log({ type: 'delivery_mission_needs_attention', detail: { projectId: project.id, missionId, status, error: String(error ?? '').slice(0, 300) } });
+    }
+    return this.get(project.id);
+  }
+
   transition(id, action, input = {}) {
     const p = this.get(id); if (!p) return null;
     if (CLOSED.has(p.stage)) throw new Error('Project is closed');
