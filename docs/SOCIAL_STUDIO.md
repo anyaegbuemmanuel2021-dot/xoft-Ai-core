@@ -124,6 +124,7 @@ The red **KILL THIS HANDLE** button sets `autoEnabled=false`, clears the next ru
 - GET /api/social/handles — list configured handles.
 - POST /api/social/handles — add a handle.
 - PATCH /api/social/handles/:id — update profile, connector/tool names, context, goals, tone, or cadence.
+- DELETE /api/social/handles/:id — stop automation, cancel queued posts for that account, then remove the handle configuration while retaining the activity audit.
 - POST /api/social/handles/:id/learn — scan posts and update the style profile.
 - POST /api/social/handles/:id/autonomy — enable or pause autonomy; enabling requires `{enabled:true, confirmedBy:"Owner"}`.
 - POST /api/social/handles/:id/run — run the autonomous cycle for an enabled handle.
