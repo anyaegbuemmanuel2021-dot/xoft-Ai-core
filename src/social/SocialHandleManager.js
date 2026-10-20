@@ -9,10 +9,27 @@ const bounded = (value, name, max = 500) => {
   return text;
 };
 const safeText = (value, max = 2000) => String(value ?? '').trim().slice(0, max);
-const parseItems = (result) => {
+const parseItems = (result, depth = 0) => {
+  if (depth > 5 || result == null) return [];
   const value = result?.result ?? result;
   if (Array.isArray(value)) return value;
-  for (const key of ['posts', 'items', 'results', 'content', 'data']) if (Array.isArray(value?.[key])) return value[key];
+  for (const key of ['posts', 'items', 'results', 'messages']) {
+    if (Array.isArray(value?.[key])) return value[key];
+  }
+  if (Array.isArray(value?.content)) {
+    const blocks = value.content;
+    const text = blocks.filter((block) => block && typeof block.text === 'string').map((block) => block.text).join('\n').trim();
+    if (text) {
+      try { return parseItems(JSON.parse(text), depth + 1); } catch { /* Some connectors return one text block per item. */ }
+    }
+    if (blocks.some((block) => block && typeof block.text === 'string')) return blocks;
+  }
+  for (const key of ['data', 'output', 'payload']) {
+    if (value?.[key] && typeof value[key] === 'object') {
+      const items = parseItems(value[key], depth + 1);
+      if (items.length) return items;
+    }
+  }
   return [];
 };
 
@@ -166,7 +183,7 @@ export class SocialHandleManager {
     if (!current.connectorId || !current.readTool) throw new Error('Configure a connector and a tool that reads this handle\'s recent posts first.');
     const result = await this.connectorManager.call(current.connectorId, { tool: current.readTool, input: { platform: current.platform, handle: current.handle, limit: 30 } });
     const posts = parseItems(result).map((item) => ({
-      text: safeText(item?.text ?? item?.content ?? item?.caption ?? item?.message ?? item?.title, 1200),
+      text: safeText(item?.text ?? item?.content ?? item?.caption ?? item?.message ?? item?.title ?? item?.description ?? item?.textContent, 1200),
       type: safeText(item?.type ?? item?.mediaType ?? 'post', 40),
       engagement: item?.engagement ?? item?.likes ?? null,
       url: safeText(item?.url ?? item?.permalink ?? '', 1000),
