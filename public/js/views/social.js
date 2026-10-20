@@ -278,8 +278,9 @@ export async function render(container) {
     setHandleFeedback('Discovering connector tools…');
     try {
       const discovered = await api.get('/api/connectors/' + encodeURIComponent(connectorId) + '/tools');
-      const tools = Array.isArray(discovered?.tools) ? discovered.tools : Array.isArray(discovered?.result?.tools) ? discovered.result.tools : [];
-      const names = tools.map((tool) => typeof tool === 'string' ? tool : tool.name).filter(Boolean);
+      const root = discovered?.result ?? discovered;
+      const tools = Array.isArray(root) ? root : Array.isArray(root?.tools) ? root.tools : Array.isArray(root?.result?.tools) ? root.result.tools : [];
+      const names = tools.map((tool) => typeof tool === 'string' ? tool : tool?.name).filter(Boolean);
       $('social-tool-options').innerHTML = names.map((name) => '<option value="' + safe(name) + '">').join('');
       const choose = (patterns) => names.find((name) => patterns.some((pattern) => pattern.test(name))) ?? '';
       if (!$('social-handle-read-tool').value) $('social-handle-read-tool').value = choose([/(?:list|read|fetch|get|search).*(post|content|feed|timeline)/i, /(post|content|feed|timeline).*(list|read|fetch|get)/i]);
