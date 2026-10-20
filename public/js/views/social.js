@@ -131,11 +131,13 @@ export async function render(container) {
   };
   const renderHandleList = () => {
     $('social-handle-list').innerHTML = socialHandles.length ? socialHandles.map((item) => {
-      let style = 'Not learned yet';
-      try { if (item.styleProfile) { const profile = JSON.parse(item.styleProfile); style = safe(profile.summary || profile.voice || 'Style profile saved'); } } catch { style = safe(item.styleProfile.slice(0, 180)); }
+      let style = 'Not learned yet'; let themes = 'No themes learned yet'; let voice = '';
+      try { if (item.styleProfile) { const profile = JSON.parse(item.styleProfile); style = safe(profile.summary || 'Style profile saved'); voice = safe(profile.voice || ''); themes = Array.isArray(profile.themes) ? profile.themes.slice(0, 6).map((x) => safe(x)).join(' · ') : 'Style profile saved'; } } catch { style = safe(item.styleProfile.slice(0, 180)); }
       return `<article class="social-post social-handle-card">
         <div class="social-post-head"><div><strong>${safe(item.displayName || item.handle)}</strong><div class="plugin-results">${safe(item.platform)} · ${safe(item.handle)} · ${item.learnedExamples || 0} examples learned</div></div><span class="plugin-category">${item.autoEnabled ? 'AUTOPILOT ON' : 'AUTOPILOT OFF'}</span></div>
         <p><strong>Style:</strong> ${style}</p>
+        ${voice ? `<p><strong>Voice:</strong> ${voice}</p>` : ''}
+        <p><strong>Recurring themes:</strong> ${themes}</p>
         <p class="plugin-results">Next run: ${safe(localTime(item.nextRunAt))} · Last scan: ${safe(localTime(item.lastScanAt))}</p>
         ${item.lastError ? `<p class="social-error">Last issue: ${safe(item.lastError)}</p>` : ''}
         <div class="social-actions">
