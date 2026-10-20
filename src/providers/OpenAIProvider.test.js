@@ -37,3 +37,47 @@ test('OpenAIProvider.stream uses complete() for tool-enabled requests', async ()
   assert.deepEqual(events.map((e) => e.type), ['text', 'done']);
   assert.equal(events.at(-1).result.toolCalls[0].name, 'x');
 });
+
+test('OpenAIProvider.stream accepts a standard JSON completion from non-streaming compatible gateways', async () => {
+  const provider = new OpenAIProvider();
+  provider.isConfigured = () => true;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    assert.equal(JSON.parse(options.body).stream, true);
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: 'Gateway reply' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 4, completion_tokens: 2 },
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const events = [];
+    for await (const event of provider.stream({ messages: [{ role: 'user', content: 'Hi' }] })) events.push(event);
+    assert.deepEqual(events.map((event) => event.type), ['text', 'done']);
+    assert.equal(events[0].delta, 'Gateway reply');
+    assert.equal(events[1].result.text, 'Gateway reply');
+    assert.deepEqual(events[1].result.usage, { inputTokens: 4, outputTokens: 2 });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('OpenAIProvider.stream forwards AbortSignal to fetch', async () => {
+  const provider = new OpenAIProvider();
+  provider.isConfigured = () => true;
+  const controller = new AbortController();
+  const originalFetch = globalThis.fetch;
+  let receivedSignal;
+  globalThis.fetch = async (_url, options) => {
+    receivedSignal = options.signal;
+    return new Response('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":null}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+  };
+  try {
+    for await (const _event of provider.stream({ messages: [], signal: controller.signal })) { /* consume */ }
+    assert.equal(receivedSignal, controller.signal);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
