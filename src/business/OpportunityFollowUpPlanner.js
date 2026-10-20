@@ -33,6 +33,26 @@ export class OpportunityFollowUpPlanner {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 
+  getDraft(id) {
+    return this.store.load().drafts.find((draft) => draft.id === id) ?? null;
+  }
+
+  markSent(id, { provider, messageId, recipient, approvedBy, consentEvidence } = {}) {
+    const data = this.store.load();
+    const draft = data.drafts.find((item) => item.id === id);
+    if (!draft) return null;
+    if (draft.status !== 'draft') throw new Error('Only an unsent draft can be sent');
+    if (!provider || !messageId || !recipient || !approvedBy || !consentEvidence) throw new Error('Provider, message id, recipient, approver, and consent evidence are required');
+    Object.assign(draft, {
+      status: 'sent', sentAt: this.now().toISOString(),
+      delivery: { provider, messageId, recipient, approvedBy: String(approvedBy).slice(0, 120), consentEvidence: String(consentEvidence).slice(0, 1000) },
+      note: 'Sent through the configured provider. Delivery/read receipt may arrive separately.',
+    });
+    this.store.save(data);
+    this.activityLog?.log({ type: 'opportunity_follow_up_sent', detail: { draftId: id, opportunityId: draft.opportunityId, provider, messageId, approvedBy: String(approvedBy).slice(0, 120) } });
+    return draft;
+  }
+
   generateDueDrafts() {
     const now = this.now();
     const data = this.store.load();
