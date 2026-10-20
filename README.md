@@ -20,7 +20,7 @@ reach. This file is the setup guide.
 
 - **Node.js 22.5 or newer** (`node --version`) — the built-in `node:sqlite` layer needs it; matches `engines.node` in `package.json` and the Dockerfile base image
 - npm (comes with Node)
-- An internet connection for `npm install` (5 small dependencies: `dotenv`, `express`, `express-rate-limit`, `helmet`, `ws`)
+- An internet connection for `npm install` (runtime dependencies are installed from `package.json`, including the Lightpanda CDP client `puppeteer-core`)
 - At least **one AI key** (or local Ollama) to get answers — see the key table below
 - No database to install; data lives under `data/` (SQLite or JSON)
 
@@ -49,7 +49,7 @@ You need **only one AI provider** to start. Everything else is optional. Put val
 | Anthropic Claude | `ANTHROPIC_API_KEY` | https://console.anthropic.com → API keys |
 | xAI Grok | `XAI_API_KEY` | https://console.x.ai |
 | Ollama (free, offline, no key) | `OLLAMA_ENABLED=true`, `OLLAMA_MODEL=llama3.1` | https://ollama.com, then `ollama pull llama3.1` |
-| Web search | `BRAVE_SEARCH_API_KEY` | https://brave.com/search/api |
+| Browser + web search (default) | `LPD_TOKEN` | [Lightpanda Cloud](https://lightpanda.io/docs/quickstart/installation-and-setup); use `BROWSER_PROVIDER=lightpanda`, `LIGHTPANDA_CLOUD_REGION=euwest`, and store the token as a hosting secret. If `BRAVE_SEARCH_API_KEY` is configured, structured Brave search is used; otherwise XOFT searches through DuckDuckGo using Lightpanda. |
 | Voice replies | `ELEVENLABS_API_KEY` | https://elevenlabs.io |
 | Gmail / Calendar | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` | https://console.cloud.google.com → Credentials → OAuth client |
 | WhatsApp | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` (you invent it) | https://developers.facebook.com → create app → WhatsApp |
