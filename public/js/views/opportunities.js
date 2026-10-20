@@ -24,6 +24,16 @@ export async function render(container) {
         <div class="row"><span class="main">Lost</span><strong>${summary.lost ?? 0}</strong></div>
         <p class="muted">Estimated value is not confirmed income. Mark work as won only when the opportunity is genuinely secured.</p>
       `)}
+      ${card('Autonomous opportunity scout', `
+        <p class="muted">XOFT can periodically search public web results for potential clients and projects. It saves sourced leads for qualification; it does not automatically contact prospects or claim unverified work as won.</p>
+        <div id="scout-status" class="muted">Loading scout status…</div>
+        <div class="form-row"><label for="scout-enabled">Background scouting</label><select id="scout-enabled"><option value="true">Enabled</option><option value="false">Paused</option></select></div>
+        <div class="form-row"><label for="scout-interval">Repeat every</label><select id="scout-interval">${[1,2,3,4,6,8,12,24].map((n) => `<option value="${n}" ${n === 6 ? 'selected' : ''}>${n} hour${n === 1 ? '' : 's'}</option>`).join('')}</select></div>
+        <div class="form-row"><label for="scout-queries">Search topics (one per line)</label><textarea id="scout-queries" rows="5" maxlength="3600" placeholder="freelance website development jobs remote Nigeria&#10;businesses looking for social media management Nigeria"></textarea></div>
+        <button id="scout-save" class="primary">Save scout settings</button>
+        <button id="scout-run">Run research now</button>
+        <div id="scout-result" class="muted" aria-live="polite"></div>
+      ` , { span2: true })}
       ${card('Discover public opportunities', `
         <p class="muted">Search public web results for potential clients or paid projects. XOFT saves sourced results for review; it does not treat search snippets as verified clients or guaranteed income.</p>
         <div class="form-row"><label for="opp-discover-query">What should XOFT look for?</label><input id="opp-discover-query" maxlength="300" placeholder="small businesses in Enugu looking for website development" /></div>
@@ -47,6 +57,48 @@ export async function render(container) {
       `, { span2: true })}
     </div>
   `;
+  const scoutStatusNode = container.querySelector('#scout-status');
+  const scoutEnabled = container.querySelector('#scout-enabled');
+  const scoutInterval = container.querySelector('#scout-interval');
+  const scoutQueries = container.querySelector('#scout-queries');
+  try {
+    const scout = await api.get('/api/opportunity-scout');
+    scoutEnabled.value = String(scout.enabled);
+    scoutInterval.value = String(scout.intervalHours);
+    scoutQueries.value = (scout.queries ?? []).join('\n');
+    scoutStatusNode.textContent = `Status: ${scout.lastRunStatus ?? 'not run'} · Last run: ${scout.lastRunAt ? fmtTime(scout.lastRunAt) : 'not yet'} · Next run: ${scout.nextRunAt ? fmtTime(scout.nextRunAt) : 'not scheduled'}`;
+    if (scout.lastRunSummary) container.querySelector('#scout-result').textContent = `Last search: ${scout.lastRunSummary.searched ?? 0} results; ${scout.lastRunSummary.saved ?? 0} saved; ${scout.lastRunSummary.duplicates ?? 0} duplicates; ${scout.lastRunSummary.errors?.length ?? 0} query errors.`;
+  } catch {
+    scoutStatusNode.textContent = 'Background scout status is unavailable. Check server connectivity and API permissions.';
+  }
+  onDelegate(container, 'click', '#scout-save', async () => {
+    const queries = scoutQueries.value.split('\n').map((q) => q.trim()).filter(Boolean);
+    const result = await guarded(() => api.patch('/api/opportunity-scout/settings', {
+      enabled: scoutEnabled.value === 'true',
+      intervalHours: Number(scoutInterval.value),
+      queries,
+    }), 'Save scout settings');
+    if (result && !result.__queued) {
+      toast('Scout settings saved', 'ok');
+      render(container);
+    }
+  });
+  onDelegate(container, 'click', '#scout-run', async () => {
+    const button = container.querySelector('#scout-run');
+    button.disabled = true;
+    button.textContent = 'Researching…';
+    try {
+      const result = await guarded(() => api.post('/api/opportunity-scout/run', {}), 'Run opportunity research');
+      if (result && !result.__queued) {
+        container.querySelector('#scout-result').textContent = `Run ${result.status}: ${result.searched ?? 0} results; ${result.saved ?? 0} saved; ${result.duplicates ?? 0} duplicates; ${result.errors?.length ?? 0} query errors.`;
+        render(container);
+      }
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Run research now';
+    }
+  });
+
   const body = container.querySelector('#opp-list');
   const paintList = (query = '') => {
     const filtered = opportunities.filter((item) => [item.title, item.company, item.service, item.fitRationale].some((v) => String(v ?? '').toLowerCase().includes(query.toLowerCase())));
