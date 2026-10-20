@@ -222,7 +222,7 @@ export async function render(container) {
       const names = tools.map((tool) => typeof tool === 'string' ? tool : tool.name).filter(Boolean);
       $('social-tool-options').innerHTML = names.map((name) => '<option value="' + safe(name) + '">').join('');
       const choose = (patterns) => names.find((name) => patterns.some((pattern) => pattern.test(name))) ?? '';
-      if (!$('social-comments-tool').value) $('social-comments-tool').value = choose(/comment.*(list|read|fetch|get)|(?:list|read|fetch|get).*comment/i ? [/comment.*(list|read|fetch|get)/i, /(?:list|read|fetch|get).*comment/i] : []);
+      if (!$('social-comments-tool').value) $('social-comments-tool').value = choose([/comment.*(list|read|fetch|get)/i, /(?:list|read|fetch|get).*comment/i]);
       if (!$('social-dms-tool').value) $('social-dms-tool').value = choose([/direct.*message.*(list|read|fetch|get)/i, /(?:inbox|message|dm).*(list|read|fetch|get)/i, /(?:list|read|fetch|get).*(inbox|message|dm)/i]);
       if (!$('social-reply-tool').value) $('social-reply-tool').value = choose([/(reply|respond).*(comment|message|dm)/i, /(comment|message|dm).*(reply|respond|send)/i]);
       engagementFeedback(names.length ? 'Found ' + names.length + ' connector tool(s). Confirm the selected tools really read the chosen account and send a reply.' : 'No tools returned. Check the connector configuration and discovery response.');
