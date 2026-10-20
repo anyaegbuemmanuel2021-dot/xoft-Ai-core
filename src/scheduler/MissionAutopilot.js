@@ -100,6 +100,13 @@ export class MissionAutopilot {
         ? await this.missionScheduler.runBatch(selected.map((item) => item.id), { concurrency: 1 })
         : [];
       const finishedAt = this.now();
+      const allMissions = this.missionScheduler.manager?.list?.() ?? [];
+      const deadlineWarnings = allMissions
+        .filter((mission) => mission.deadline && !['completed', 'cancelled'].includes(mission.status))
+        .map((mission) => ({ id: mission.id, goal: mission.goal, status: mission.status, deadline: mission.deadline, msRemaining: Date.parse(mission.deadline) - finishedAt.getTime() }))
+        .filter((mission) => Number.isFinite(mission.msRemaining) && mission.msRemaining <= 24 * 60 * 60 * 1000)
+        .sort((a, b) => a.msRemaining - b.msRemaining)
+        .slice(0, 20);
       const summary = {
         forced,
         emergencyStopActive: emergency,
@@ -108,6 +115,7 @@ export class MissionAutopilot {
         selectedMissions: selected.map((mission) => ({ id: mission.id, goal: mission.goal, score: mission.score, reasons: mission.reasons })),
         skipped: ranking.skipped.length,
         skippedMissions: ranking.skipped.slice(0, 20),
+        deadlineWarnings,
         results,
         durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
       };
