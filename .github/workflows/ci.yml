@@ -15,6 +15,11 @@ jobs:
       - run: node --check src/proactive/BriefingScheduler.js
       - run: node --check src/missions/MissionManager.js
       - run: node --check src/business/ProjectDeliveryManager.js
+      - run: node --check src/business/OpportunityFollowUpPlanner.js
+      - run: node --check src/business/OpportunityStore.js
+      - run: node --check src/skills/SkillCatalog.js
+      - run: node --check public/js/views/delivery.js
+      - run: node --check public/js/views/settings.js
       - run: node --check public/js/views/missions.js
       - run: node --check public/js/views/opportunities.js
       - run: node --check src/agents/research/SmartVerificationHandler.js
