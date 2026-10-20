@@ -86,6 +86,7 @@ import { KillSwitch } from './security/KillSwitch.js';
 import { ProactiveEngine } from './proactive/ProactiveEngine.js';
 import { MissionManager } from './missions/MissionManager.js';
 import { OpportunityStore } from './business/OpportunityStore.js';
+import { OpportunityFollowUpPlanner } from './business/OpportunityFollowUpPlanner.js';
 import { scoreOpportunity } from './business/OpportunityScorer.js';
 import { BriefingScheduler } from './proactive/BriefingScheduler.js';
 import { OpportunityScout } from './proactive/OpportunityScout.js';
@@ -111,6 +112,7 @@ const router = new ProviderRouter(modelHealth, { privacy: config.privacy.routing
 // corrupt file just means "use the environment".
 const gatewaySettings = new GatewaySettingsStore({ dataDir: config.memory.dataDir, config }).load();
 const activityLog = new ActivityLog({ dataDir: config.memory.dataDir });
+const opportunityFollowUpPlanner = new OpportunityFollowUpPlanner({ dataDir: config.memory.dataDir, sqliteStore: durableStore, opportunityStore, activityLog });
 const visionInterpreter = new VisionInterpreter({ providerRouter: router, activityLog });
 const eventBus = new EventBus({ activityLog });
 // Assigned once the HTTP server exists (RealtimeServer needs it to attach
@@ -575,6 +577,7 @@ app.post('/api/briefings/preview', async (_req, res) => {
   } catch (err) { return res.status(500).json({ error: err.message }); }
 });
 app.get('/api/opportunities/summary', (_req, res) => res.json(opportunityStore.summary()));
+app.get('/api/opportunities/follow-up-drafts', (req, res) => res.json(opportunityFollowUpPlanner.list({ status: req.query.status })));\napp.post('/api/opportunities/follow-up-drafts/generate', (_req, res) => {\n  try { res.json(opportunityFollowUpPlanner.generateDueDrafts()); }\n  catch (err) { res.status(500).json({ error: err.message }); }\n});
 app.get('/api/opportunities', (req, res) => {
   const { stage, q, limit } = req.query;
   res.json(opportunityStore.list({ stage, q, limit: limit ? Number(limit) : undefined }));
