@@ -72,6 +72,7 @@ function normalize(input, { partial = false } = {}) {
     }
   }
   if (!partial && !out.title) throw new Error('title is required');
+  if (partial && Object.hasOwn(input, 'title') && !out.title) throw new Error('title cannot be empty');
   if (out.stage === undefined && !partial) out.stage = 'researched';
   return out;
 }
@@ -143,6 +144,19 @@ export class OpportunityStore {
     const item = data.opportunities.find((entry) => entry.id === id);
     if (!item) return null;
     const fields = normalize(patch, { partial: true });
+    const nextTitle = fields.title ?? item.title;
+    const nextCompany = fields.company ?? item.company;
+    const nextSource = fields.sourceUrl ?? item.sourceUrl;
+    const duplicate = data.opportunities.find((other) => other.id !== id && (
+      (nextSource && other.sourceUrl?.toLowerCase() === nextSource.toLowerCase()) ||
+      (nextCompany && other.company?.toLowerCase() === nextCompany.toLowerCase() && other.title.toLowerCase() === nextTitle.toLowerCase())
+    ));
+    if (duplicate) {
+      const error = new Error('Updating this opportunity would create a duplicate');
+      error.code = 'OPPORTUNITY_DUPLICATE';
+      error.opportunity = duplicate;
+      throw error;
+    }
     const beforeStage = item.stage;
     Object.assign(item, fields, { updatedAt: new Date().toISOString() });
     if (fields.stage && fields.stage !== beforeStage) {
