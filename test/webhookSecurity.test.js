@@ -28,7 +28,7 @@ async function bootServer(port) {
   const deadline = Date.now() + 12_000;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/status');
+      const res = await fetch(`http://127.0.0.1:${port}/api/status`);
       if ([200, 401].includes(res.status)) break;
     } catch {}
     if (child.exitCode !== null) throw new Error(`XOFT exited before listening (code ${child.exitCode})`);
