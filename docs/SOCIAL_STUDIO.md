@@ -92,3 +92,42 @@ The selected reply tool receives `platform`, `channel`, `externalId`, `conversat
 - Auto-replying to inbound messages without review is not enabled. Replies require explicit approval each time.
 - XOFT does not send unsolicited bulk DMs or bypass messaging windows, consent, rate limits, or platform policies.
 - No live social account was connected or used to verify this feature during implementation.
+
+
+## Multi-handle learning and autonomous posting
+
+The Social Studio now includes a per-handle control room backed by `src/social/SocialHandleManager.js`. Each saved handle stores its own platform, profile identifier, connector, exact content-reading tool, exact publishing tool, brand facts, goals, voice, learned style profile, run cadence, run history, and autonomy state in `social-handles.json` (or SQLite KV when configured).
+
+### Setup
+
+1. Add each social handle separately. You may add multiple handles on one platform and across platforms.
+2. Select the connector and discover its tools.
+3. Choose a reader that actually returns recent post text for the selected account and a publisher that posts to that exact account. Tool-name suggestions are only hints; verify their input/output contracts.
+4. Add confirmed brand facts and restrictions. XOFT must not invent prices, testimonials, discounts, performance claims, or promises.
+5. Use **Learn from posts** to fetch recent examples and generate a stored style profile. If the connector returns no readable examples, learning fails rather than fabricating a profile.
+6. Enter the owner confirmation name and enable autonomy for that handle only after verifying the tools and account permissions.
+
+### What autonomy does
+
+- The background manager checks enabled handles each minute.
+- A newly enabled handle is eligible for a run immediately; later runs use its configured interval (12–168 hours, default 24 hours).
+- A run reads examples, updates the style profile, generates one original platform-appropriate post, and queues it for the configured publisher about one minute later.
+- Enabling autonomy is explicit per-account consent to publish without a separate approval for every post. It does not grant new platform permissions.
+- Connector errors are recorded on the handle; no successful post is claimed unless the social scheduler receives a non-error connector result. Verify actual public visibility with the platform/provider.
+
+### Per-handle KILL switch
+
+The red **KILL THIS HANDLE** button sets `autoEnabled=false`, clears the next run time, records the stop event, and cancels scheduled queue items targeted to that handle. It does not stop other handles. It cannot retract a post that the external platform has already accepted, and an in-flight request may require checking the provider before retrying. Use the server's global emergency stop for a system-wide halt.
+
+### API
+
+- GET /api/social/handles — list configured handles.
+- POST /api/social/handles — add a handle.
+- PATCH /api/social/handles/:id — update profile, connector/tool names, context, goals, tone, or cadence.
+- POST /api/social/handles/:id/learn — scan posts and update the style profile.
+- POST /api/social/handles/:id/autonomy — enable or pause autonomy; enabling requires `{enabled:true, confirmedBy:"Owner"}`.
+- POST /api/social/handles/:id/run — run the autonomous cycle for an enabled handle.
+- POST /api/social/handles/:id/kill — activate the handle-specific kill switch and cancel queued posts.
+- GET /api/social/handles/history — recent social autonomy activity.
+
+All these endpoints require admin authentication; device-scoped credentials are rejected. Autonomous publishing requires a real, authorized connector. XOFT cannot scan or post to a profile merely because its handle was typed into this dashboard.
