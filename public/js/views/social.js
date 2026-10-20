@@ -40,6 +40,27 @@ export async function render(container) {
       <div class="plugin-hero-copy"><span class="plugin-kicker">XOFT / PERSONAL ASSISTANT</span><h2>Social Studio</h2><p>Plan content, create drafts, schedule posts, and track what actually published. XOFT only publishes through a configured, working connector after you approve the post.</p></div>
       <div class="plugin-hero-stats"><div><strong id="social-drafts">${summary.drafts}</strong><span>DRAFTS</span></div><div><strong id="social-scheduled">${summary.scheduled}</strong><span>SCHEDULED</span></div><div><strong id="social-published">${summary.published}</strong><span>PUBLISHED</span></div></div>
     </section>
+    <section class="card social-handle-dashboard">
+      <div class="plugin-section-head"><div><span class="plugin-kicker">MULTI-ACCOUNT CONTROL ROOM</span><h2>Social handles & autonomous AI</h2></div><span class="plugin-category">Independent control per account</span></div>
+      <p>Register as many social handles as you need. XOFT can inspect recent content through a configured connector, learn the account's recurring themes and style, then generate original posts on the account's own schedule. Enable autonomy separately for each handle. The red KILL button immediately disables future runs and cancels queued scheduled posts for that handle.</p>
+      <div class="plugin-form-grid">
+        <div class="form-row"><label for="social-handle-platform">PLATFORM</label><select id="social-handle-platform">${PLATFORMS.map(([id,label]) => `<option value="${id}">${label}</option>`).join('')}</select></div>
+        <div class="form-row"><label for="social-handle-name">HANDLE / PROFILE URL</label><input id="social-handle-name" maxlength="180" placeholder="@yourbrand or profile URL" /></div>
+        <div class="form-row"><label for="social-handle-display">DISPLAY NAME</label><input id="social-handle-display" maxlength="180" placeholder="Brand or profile name" /></div>
+        <div class="form-row"><label for="social-handle-connector">CONNECTOR</label><select id="social-handle-connector"><option value="">Choose connector</option>${summary.connectors.map((x) => `<option value="${safe(x.id)}">${safe(x.name)} (${safe(x.id)})</option>`).join('')}</select></div>
+        <div class="form-row"><label for="social-handle-read-tool">READ RECENT POSTS TOOL</label><input id="social-handle-read-tool" list="social-tool-options" maxlength="120" placeholder="Exact discovered tool name" /></div>
+        <div class="form-row"><label for="social-handle-publish-tool">PUBLISH POST TOOL</label><input id="social-handle-publish-tool" list="social-tool-options" maxlength="120" placeholder="Exact discovered tool name" /></div>
+        <div class="form-row"><label for="social-handle-goals">CONTENT GOAL</label><input id="social-handle-goals" maxlength="1000" value="Build trust and attract relevant customers" /></div>
+        <div class="form-row"><label for="social-handle-tone">BRAND VOICE</label><input id="social-handle-tone" maxlength="300" value="Professional, helpful and clear" /></div>
+        <div class="form-row"><label for="social-handle-interval">AUTONOMOUS POST INTERVAL (HOURS)</label><input id="social-handle-interval" type="number" min="12" max="168" value="24" /></div>
+        <div class="form-row"><label for="social-handle-owner">OWNER CONFIRMATION NAME</label><input id="social-handle-owner" maxlength="120" placeholder="Required to enable autonomous publishing" /></div>
+      </div>
+      <div class="form-row"><label for="social-handle-context">CONFIRMED BRAND FACTS / BOUNDARIES</label><textarea id="social-handle-context" rows="3" maxlength="3000" placeholder="What this brand offers, target audience, approved links, facts and claims XOFT must not invent."></textarea></div>
+      <div class="social-actions"><button type="button" id="social-handle-discover">Discover tools for selected connector</button><button type="button" id="social-handle-add" class="primary">＋ Add social handle</button><button type="button" id="social-handle-refresh">Refresh handles</button></div>
+      <p id="social-handle-feedback" class="plugin-safety-note" aria-live="polite">Autonomous posting starts OFF. Choose the exact account-reading and publishing tools from your connector.</p>
+      <div id="social-handle-list" class="social-list"><div class="empty">Loading social handles…</div></div>
+      <div class="plugin-safety-note"><strong>Autonomy boundary:</strong> XOFT learns from the content the connected tool actually returns. It does not bypass platform permissions or infer that a handle is authenticated. When autonomy is enabled, it may publish original posts without per-post approval, but only for that specific handle. The kill switch disables future runs; a post already accepted by the platform cannot be recalled by XOFT.</div>
+    </section>
     <section class="card">
       <div class="plugin-section-head"><div><span class="plugin-kicker">CONTENT WORKBENCH</span><h2>Create a post</h2></div><span class="plugin-category">Draft first · approve before publishing</span></div>
       <div class="plugin-form-grid">
