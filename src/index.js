@@ -129,6 +129,7 @@ const killSwitch = new KillSwitch({ emergencyStop, activityLog, dataDir: config.
 killSwitch.start();
 const injectionGuard = new PromptInjectionGuard({ activityLog });
 const connectorManager = new ConnectorManager({ definitions: config.connectors.definitions, activityLog });
+const socialMediaScheduler = new SocialMediaScheduler({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, activityLog });
 const whatsappService = new WhatsAppService();
 const whatsappInbox = new WhatsAppInboxStore({ dataDir: config.memory.dataDir });
 const twilioService = new TwilioService();
