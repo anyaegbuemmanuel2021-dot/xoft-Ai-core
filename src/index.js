@@ -674,6 +674,12 @@ app.patch('/api/social/handles/:id', requireAdmin, (req, res) => {
     return res.json(item);
   } catch (err) { return res.status(400).json({ error: err.message }); }
 });
+app.delete('/api/social/handles/:id', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot remove social accounts.' });
+  const result = socialHandleManager.remove(req.params.id);
+  if (!result) return res.status(404).json({ error: 'Social handle not found' });
+  return res.json(result);
+});
 app.post('/api/social/handles/:id/learn', requireAdmin, async (req, res) => {
   if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot access private social account settings.' });
   try { return res.json(await socialHandleManager.learn(req.params.id)); }
