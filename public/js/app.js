@@ -124,6 +124,12 @@ function wireConnectivity() {
   paint();
 }
 
+wsEvents.addEventListener('event', (event) => {
+  if (event.detail?.type === 'task.verification_required') {
+    toast('XOFT paused a task for website verification. Open Tasks to review the page and retry.', 'warn');
+  }
+});
+
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => { /* offline shell is best-effort */ });
