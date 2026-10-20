@@ -150,6 +150,16 @@ export class SocialHandleManager {
     }
     return cancelled;
   }
+  remove(id) {
+    const current = this.get(id);
+    if (!current) return null;
+    const stopped = this.kill(id, 'Handle removed by owner');
+    const data = this._data();
+    data.handles = data.handles.filter((item) => item.id !== id);
+    this.store.save(data);
+    this._log('social_handle_removed', { id, platform: current.platform, handle: current.handle, cancelledScheduledPosts: stopped?.cancelledScheduledPosts ?? 0 });
+    return { removed: true, id, cancelledScheduledPosts: stopped?.cancelledScheduledPosts ?? 0 };
+  }
   async learn(id) {
     const current = this.get(id);
     if (!current) throw new Error('Social handle not found');
