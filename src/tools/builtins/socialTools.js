@@ -1,5 +1,14 @@
 import { Tool, RiskLevel } from '../Tool.js';
 
+function safePost(post) {
+  if (!post) return post;
+  const { publishInput, providerResult, ...safe } = post;
+  const providerSummary = providerResult && typeof providerResult === 'object'
+    ? Object.fromEntries(['id', 'postId', 'url', 'status', 'published'].filter((key) => providerResult[key] !== undefined).map((key) => [key, providerResult[key]]))
+    : null;
+  return { ...safe, providerResult: providerSummary };
+}
+
 export function buildSocialTools({ socialMediaScheduler } = {}) {
   if (!socialMediaScheduler) return [];
   return [
@@ -16,7 +25,7 @@ export function buildSocialTools({ socialMediaScheduler } = {}) {
       },
       riskLevel: RiskLevel.SAFE,
       status: 'IMPLEMENTED',
-      execute: async ({ status, platform, limit }) => ({ posts: socialMediaScheduler.list({ status, platform, limit }), summary: socialMediaScheduler.summary() }),
+      execute: async ({ status, platform, limit }) => ({ posts: socialMediaScheduler.list({ status, platform, limit }).map(safePost), summary: socialMediaScheduler.summary() }),
     }),
     new Tool({
       name: 'social_create_draft',
