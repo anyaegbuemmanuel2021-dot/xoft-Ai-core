@@ -59,6 +59,7 @@ export async function render(container) {
       <div class="social-actions"><button type="button" id="social-handle-discover">Discover tools for selected connector</button><button type="button" id="social-handle-add" class="primary">＋ Add social handle</button><button type="button" id="social-handle-refresh">Refresh handles</button></div>
       <p id="social-handle-feedback" class="plugin-safety-note" aria-live="polite">Autonomous posting starts OFF. Choose the exact account-reading and publishing tools from your connector.</p>
       <div id="social-handle-list" class="social-list"><div class="empty">Loading social handles…</div></div>
+      <div class="social-history-wrap"><div class="plugin-section-head"><div><span class="plugin-kicker">AUDIT TRAIL</span><h3>Recent account activity</h3></div><button type="button" id="social-handle-history-refresh">Refresh activity</button></div><div id="social-handle-history" class="social-list"><div class="empty">Loading activity…</div></div></div>
       <div class="plugin-safety-note"><strong>Autonomy boundary:</strong> XOFT learns from the content the connected tool actually returns. It does not bypass platform permissions or infer that a handle is authenticated. When autonomy is enabled, it may publish original posts without per-post approval, but only for that specific handle. The kill switch disables future runs; a post already accepted by the platform cannot be recalled by XOFT.</div>
     </section>
     <section class="card">
@@ -153,6 +154,14 @@ export async function render(container) {
   const refreshHandles = async () => {
     socialHandles = await api.get('/api/social/handles');
     renderHandleList();
+  };
+  const refreshHandleHistory = async () => {
+    const entries = await api.get('/api/social/handles/history?limit=12');
+    $('social-handle-history').innerHTML = entries.length ? entries.map((entry) => {
+      const detail = entry.detail ?? {};
+      const summary = [detail.handle, detail.platform, detail.examples ? detail.examples + ' examples' : '', detail.postId ? 'post ' + detail.postId.slice(0, 8) : '', detail.cancelledScheduledPosts !== undefined ? detail.cancelledScheduledPosts + ' queued cancelled' : '', detail.error ?? detail.reason ?? ''].filter(Boolean).map(safe).join(' · ');
+      return '<article class="social-post"><div class="social-post-head"><strong>' + safe(String(entry.type ?? 'activity').replaceAll('_', ' ')) + '</strong><span class="plugin-results">' + safe(localTime(entry.at)) + '</span></div><p class="plugin-results">' + (summary || 'No extra details') + '</p></article>';
+    }).join('') : '<div class="empty">No account activity recorded yet.</div>';
   };
   const refresh = async () => {
     [summary, posts] = await Promise.all([api.get('/api/social/summary'), api.get('/api/social/posts')]);
@@ -309,6 +318,7 @@ export async function render(container) {
     finally { $('social-handle-add').disabled = false; }
   });
   $('social-handle-refresh').addEventListener('click', () => refreshHandles().catch((error) => setHandleFeedback('Could not refresh handles: ' + error.message)));
+  $('social-handle-history-refresh').addEventListener('click', () => refreshHandleHistory().catch((error) => setHandleFeedback('Could not refresh activity: ' + error.message)));
   $('social-handle-list').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-handle-action]');
     if (!button) return;
@@ -494,5 +504,6 @@ export async function render(container) {
     } catch (error) { engagementFeedback('Could not update inbox item: ' + error.message); }
   });
   refreshHandles().catch((error) => setHandleFeedback('Handles not available: ' + error.message));
+  refreshHandleHistory().catch((error) => $('social-handle-history').innerHTML = '<div class="empty">Activity unavailable: ' + safe(error.message) + '</div>');
   refreshEngagement().catch((error) => engagementFeedback('Inbox not available: ' + error.message));
 }
