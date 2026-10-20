@@ -41,6 +41,7 @@ import { buildCalendarTools } from './tools/builtins/calendarTools.js';
 import { buildResearchTools } from './tools/builtins/researchTools.js';
 import { buildMediaTools } from './tools/builtins/mediaTools.js';
 import { buildSocialTools } from './tools/builtins/socialTools.js';
+import { buildSocialEngagementTools } from './tools/builtins/socialEngagementTools.js';
 import { ActivityLog } from './activity/ActivityLog.js';
 import { ApprovalSystem } from './approval/ApprovalSystem.js';
 import { TaskPlanner } from './planner/TaskPlanner.js';
@@ -182,6 +183,7 @@ for (const tool of [
   ...buildResearchTools(),
   ...buildMediaTools(),
   ...buildSocialTools({ socialMediaScheduler }),
+  ...buildSocialEngagementTools({ socialEngagementManager }),
   ...buildCommunicationTools({ whatsappService, twilioService }),
   ...buildDeviceTools({ deviceManager, visionInterpreter, activityLog }),
   ...buildRuntimeTools({ deviceManager }),
