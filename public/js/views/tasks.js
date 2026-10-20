@@ -5,7 +5,7 @@ import { onEvent } from '../ws.js';
 export const title = 'Tasks';
 export let cleanup = null;
 
-const TASK_EVENTS = ['task.created', 'task.queued', 'task.started', 'task.verifying', 'task.retrying', 'task.recovering', 'task.cancelled', 'task_completed', 'task_failed'];
+const TASK_EVENTS = ['task.created', 'task.queued', 'task.started', 'task.verifying', 'task.verification_required', 'task.retrying', 'task.recovering', 'task.cancelled', 'task_completed', 'task_failed'];
 
 export async function render(container) {
   const tasks = await api.get('/api/tasks');
@@ -58,11 +58,12 @@ export async function render(container) {
 }
 
 function statusBadge(status) {
-  const kind = { completed: 'ok', failed: 'err', running: 'ok', cancelled: '', blocked: 'warn', waiting_approval: 'warn', scheduled: 'warn', queued: 'warn' }[status] ?? '';
+  const kind = { completed: 'ok', failed: 'err', running: 'ok', cancelled: '', blocked: 'warn', waiting_approval: 'warn', waiting_verification: 'warn', scheduled: 'warn', queued: 'warn' }[status] ?? '';
   return badge(status, kind);
 }
 
 function taskRow(t) {
+  const verification = t.steps.find((s) => s.status === 'waiting_verification' && s.verificationChallenge);
   const doneSteps = t.steps.filter((s) => s.status === 'completed').length;
   return `
     <div class="row" style="flex-direction:column; align-items:stretch;">
@@ -71,8 +72,10 @@ function taskRow(t) {
         ${statusBadge(t.status)}
       </div>
       <div class="muted" style="margin:4px 0;">${doneSteps}/${t.steps.length} steps · created ${fmtTime(t.createdAt)}${t.scheduledFor ? ' · scheduled for ' + fmtTime(t.scheduledFor) : ''}</div>
+      ${verification ? `<div class="muted" role="status" style="margin:6px 0;">Verification needed: ${esc(verification.verificationChallenge.type)}. ${esc(verification.verificationChallenge.message)}</div>` : ''}
       <div class="inline" style="gap:6px; flex-wrap:wrap;">
-        ${t.status === 'planned' || t.status === 'blocked' || t.status === 'waiting_approval' ? `<button data-execute="${t.id}">Execute</button><button data-enqueue="${t.id}">Enqueue</button><button data-schedule="${t.id}">Schedule…</button>` : ''}
+        ${verification?.verificationChallenge.url ? `<a class="button" href="${esc(verification.verificationChallenge.url)}" target="_blank" rel="noopener noreferrer">Open page</a>` : ''}
+        ${t.status === 'planned' || t.status === 'blocked' || t.status === 'waiting_approval' || t.status === 'waiting_verification' ? `<button data-execute="${t.id}">Execute</button><button data-enqueue="${t.id}">Enqueue</button><button data-schedule="${t.id}">Schedule…</button>` : ''}
         ${!['completed', 'cancelled'].includes(t.status) ? `<button data-cancel="${t.id}" class="danger">Cancel</button>` : ''}
         <button data-executions="${t.id}">Executions</button>
       </div>
