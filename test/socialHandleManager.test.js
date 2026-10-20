@@ -14,7 +14,7 @@ function fixture() {
   const cancelled = [];
   const manager = new SocialHandleManager({
     dataDir,
-    connectorManager: { get(id) { return id === 'social' ? { id, enabled: true } : null; } },
+    connectorManager: { get(id) { return id === 'social' ? { id, enabled: true } : null; }, async discover(id) { if (id !== 'social') throw new Error('unknown connector'); return { tools: [{ name: 'read_posts' }, { name: 'publish_post' }] }; } },
     socialMediaScheduler: {
       list: ({ status }) => posts.filter((post) => !status || post.status === status),
       cancel(id) { cancelled.push(id); const post = posts.find((item) => item.id === id); if (post) post.status = 'cancelled'; return post; },
@@ -68,5 +68,18 @@ test('per-handle kill switch disables future autonomy and cancels only that hand
     assert.equal(result.cancelledScheduledPosts, 1);
     assert.equal(ownPost.status, 'cancelled');
     assert.ok(!f.cancelled.includes('queued-other'));
+  } finally { f.cleanup(); }
+});
+
+test('tool preflight requires the exact reader and publisher tools to exist on the chosen connector', async () => {
+  const f = fixture();
+  try {
+    const handle = f.manager.create({ platform: 'instagram', handle: '@softly1810' });
+    f.manager.update(handle.id, { connectorId: 'social', readTool: 'read_posts', publishTool: 'publish_post' });
+    assert.deepEqual(await f.manager.validateTools(handle.id), {
+      valid: true, connectorId: 'social', readTool: 'read_posts', publishTool: 'publish_post', availableTools: 2,
+    });
+    f.manager.update(handle.id, { publishTool: 'wrong_tool' });
+    await assert.rejects(f.manager.validateTools(handle.id), /was not found in the selected connector/);
   } finally { f.cleanup(); }
 });
