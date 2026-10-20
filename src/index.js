@@ -581,6 +581,32 @@ app.post('/api/opportunity-scout/run', async (_req, res) => {
   catch (err) { return res.status(502).json({ error: err.message }); }
 });
 // --- Social content calendar and approved scheduled publishing ---
+app.post('/api/social/generate-content', requireAdmin, async (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot generate public social content.' });
+  const brief = String(req.body?.brief ?? '').trim().slice(0, 1200);
+  if (!brief) return res.status(400).json({ error: 'brief is required' });
+  const platforms = Array.isArray(req.body?.platforms) ? req.body.platforms.map(String).slice(0, 8) : [];
+  try {
+    const result = await router.complete(TaskType.REASONING, {
+      messages: [
+        { role: 'system', content: 'You are XOFT, a careful social media content assistant for a business owner. Write one original, publish-ready draft, not a strategy essay. Never invent client results, testimonials, prices, statistics, guarantees, or claims about work already completed. Adapt to the requested platforms, use a clear hook, helpful body, and the requested call to action. Return only the post copy, then a separate line beginning HASHTAGS: with up to 8 relevant hashtags. Do not claim it has been published.' },
+        { role: 'user', content: JSON.stringify({ brief, goal: String(req.body?.goal ?? 'engagement').slice(0, 80), tone: String(req.body?.tone ?? 'Professional and clear').slice(0, 120), callToAction: String(req.body?.callToAction ?? '').slice(0, 240), platforms }) },
+      ],
+      temperature: 0.7,
+    });
+    const fullText = String(result.text ?? '').trim();
+    const match = fullText.match(/(?:^|\\n)HASHTAGS:\\s*(.*)$/is);
+    const content = (match ? fullText.slice(0, match.index) : fullText).trim();
+    const hashtags = match ? match[1].split(/[\\s,]+/).map((x) => x.replace(/^#/, '').replace(/[^\\p{L}\\p{N}_]/gu, '')).filter(Boolean).slice(0, 8) : [];
+    if (!content) return res.status(502).json({ error: 'The configured model returned an empty draft.' });
+    activityLog.log({ type: 'social_content_draft_generated', detail: { platforms, goal: req.body?.goal ?? 'engagement', provider: result.provider ?? null } });
+    return res.json({ content, hashtags, provider: result.provider ?? null, saved: false, published: false });
+  } catch (err) {
+    const ai = aiErrorToHttp(err);
+    if (ai) return res.status(ai.status).json(ai.body);
+    return res.status(502).json({ error: err.message });
+  }
+});
 app.get('/api/social/summary', (_req, res) => res.json(socialMediaScheduler.summary()));
 app.get('/api/social/posts', (req, res) => res.json(socialMediaScheduler.list({ status: req.query.status, platform: req.query.platform })));
 app.post('/api/social/posts', requireAdmin, (req, res) => {
