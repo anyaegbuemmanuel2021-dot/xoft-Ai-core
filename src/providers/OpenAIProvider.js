@@ -103,6 +103,28 @@ export class OpenAIProvider extends AIProvider {
       const errText = await res.text();
       throw new Error(`OpenAIProvider: API error ${res.status} - ${errText}`);
     }
+    // Some compatible gateways and test doubles ignore stream=true and return a normal JSON completion.
+    // Accept that valid response instead of treating it as an empty SSE stream.
+    if (!res.headers.get('content-type')?.includes('text/event-stream')) {
+      const data = await res.json();
+      const choice = data.choices?.[0];
+      if (!choice?.message) throw new Error('OpenAIProvider: response was neither SSE nor a valid completion');
+      const result = {
+        text: choice.message.content ?? '',
+        toolCalls: choice.message.tool_calls?.map((tc) => ({
+          name: tc.function.name,
+          input: JSON.parse(tc.function.arguments || '{}'),
+        })),
+        usage: {
+          inputTokens: data.usage?.prompt_tokens ?? 0,
+          outputTokens: data.usage?.completion_tokens ?? 0,
+        },
+        raw: 'openai',
+      };
+      if (result.text) yield { type: 'text', delta: result.text };
+      yield { type: 'done', result };
+      return;
+    }
     if (!res.body) throw new Error('OpenAIProvider: streaming response has no body');
 
     const reader = res.body.getReader();
