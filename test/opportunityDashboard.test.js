@@ -28,7 +28,7 @@ test('dashboard navigation and PWA shell include the opportunities view', () => 
   const view = read('../public/js/views/opportunities.js');
   assert.match(app, /import \* as opportunities from '\.\/views\/opportunities\.js'/);
   assert.match(app, /\['opportunities', 'Opportunities', opportunities, 'missions'\]/);
-  assert.match(sw, /xoft-shell-v\\d+/);
+  assert.match(sw, /xoft-shell-v\d+/);
   assert.match(sw, /\/js\/views\/opportunities\.js/);
   for (const endpoint of ['/api/opportunities', '/api/opportunities/summary']) assert.ok(view.includes(endpoint));
   assert.match(view, /opp-discover/);
