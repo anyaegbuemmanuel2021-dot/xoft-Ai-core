@@ -43,7 +43,14 @@ LITELLM_ENABLED=false
 LITELLM_BASE_URL=http://localhost:4000/v1
 LITELLM_API_KEY=               # the proxy master/virtual key. Optional if your proxy has no master key.
 # LITELLM_MODEL=               # a model_name from your LiteLLM config.yaml; blank = first model the proxy lists
+
+OPENROUTER_ENABLED=false
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_API_KEY=           # create at https://openrouter.ai/keys
+OPENROUTER_MODEL=openrouter/free  # automatic selection among available free models
 ```
+
+OpenRouter's free models are cloud-hosted, so XOFT's server sends requests over the internet; no local model download or PC RAM is required. The official pricing page currently lists 25+ free models, with free-model limits of 20 requests/minute and 50 requests/day for accounts below the paid-credit threshold. Limits and model availability can change; failed requests may count toward the daily cap. This is a useful free fallback, not an unlimited or guaranteed production SLA. See [OpenRouter pricing](https://openrouter.ai/pricing) and [free models](https://openrouter.ai/collections/free-models).
 
 Optional per gateway (replace `LITELLM_` with `FREELLMAPI_`): `…_EMBEDDING_MODEL`, `…_VISION=true` (only if the model accepts images),
 `…_TOOLS=false` (if the model cannot call tools), `…_TIMEOUT_MS`.
@@ -73,8 +80,8 @@ Order is configurable and nothing is permanently "best". By default gateways ran
 so enabling one never changes which direct provider answers. To prefer a gateway:
 
 ```
-AI_PRIMARY_PROVIDER=freellmapi
-AI_FALLBACK_PROVIDERS=litellm,openai,claude
+AI_PRIMARY_PROVIDER=openai
+AI_FALLBACK_PROVIDERS=gemini,openrouter,claude,grok
 ```
 
 The router also honours: availability, health/cooldown, tool support, vision support, privacy routing (SECRET content is never sent to a
@@ -116,6 +123,12 @@ npm run dev              # dev: dashboard at http://localhost:5173
 ```
 Open the dashboard, add provider keys on the **Keys** page, copy the unified `freellmapi-…` key, then in Xoft set
 `FREELLMAPI_ENABLED=true`, `FREELLMAPI_API_KEY=<that key>` (base URL default `http://localhost:3001/v1`).
+
+### OpenRouter (cloud-hosted models, no local model download)
+
+1. Create a free account and an API key at https://openrouter.ai/keys.
+2. In XOFT Settings → AI providers, enable OpenRouter, set the base URL to `https://openrouter.ai/api/v1`, paste the key, and keep model `openrouter/free` to let OpenRouter select an available free model. Alternatively set a specific model ID ending in `:free` from its model catalog.
+3. Test the connection. Do not assume a model supports vision or tool calls unless confirmed for that model; XOFT will fall back when a request fails.
 
 ### LiteLLM proxy (Python 3.10+)
 ```
