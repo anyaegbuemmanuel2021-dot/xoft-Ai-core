@@ -255,6 +255,7 @@ const executiveBrain = new ExecutiveBrain({
 const channelGateway = new ChannelGateway({ executiveBrain, activityLog, address });
 const missionManager = new MissionManager({ taskPlanner, activityLog, eventBus, dataDir: config.memory.dataDir, emergencyStop, sqliteStore: durableStore });
 const projectDeliveryManager = new ProjectDeliveryManager({ dataDir: config.memory.dataDir, sqliteStore: durableStore, opportunityStore, missionManager, activityLog, eventBus });
+eventBus.on('mission.run', (result) => { try { projectDeliveryManager.syncMissionResult(result); } catch (err) { activityLog.log({ type: 'delivery_mission_sync_failed', detail: { missionId: result?.missionId, error: err.message } }); } });
 const briefingScheduler = new BriefingScheduler({
   dataDir: config.memory.dataDir,
   sqliteStore: durableStore,
