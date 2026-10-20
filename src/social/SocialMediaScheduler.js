@@ -25,6 +25,7 @@ function normalizeTargetAccounts(value, platforms) {
     return {
       platform,
       profileId: text(String(entry.profileId ?? entry.handle ?? entry.name ?? ''), 'target account profileId', 180),
+      handleId: String(entry.handleId ?? '').trim().slice(0, 180) || null,
       name: String(entry.name ?? '').trim().slice(0, 180),
       handle: String(entry.handle ?? '').trim().slice(0, 180),
     };
