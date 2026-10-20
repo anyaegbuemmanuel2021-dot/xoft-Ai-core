@@ -147,6 +147,7 @@ export async function render(container) {
           <button type="button" data-handle-action="run" data-handle-id="${safe(item.id)}" ${item.autoEnabled ? '' : 'disabled'}>Run now</button>
           <button type="button" data-handle-action="autonomy" data-handle-id="${safe(item.id)}">${item.autoEnabled ? 'Pause autonomy' : 'Enable autonomy'}</button>
           <button type="button" class="danger" data-handle-action="kill" data-handle-id="${safe(item.id)}">⛔ KILL THIS HANDLE</button>
+          <button type="button" data-handle-action="remove" data-handle-id="${safe(item.id)}">Remove handle</button>
         </div>
       </article>`;
     }).join('') : '<div class="empty">No handles added yet. Add your first handle above. You can register multiple profiles on the same or different platforms.</div>';
@@ -341,6 +342,20 @@ export async function render(container) {
       $('social-handle-context').value = item.brandContext || '';
       $('social-handle-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHandleFeedback('Editing ' + item.platform + ' ' + item.handle + '. Save changes below.');
+      return;
+    }
+    if (action === 'remove') {
+      if (!navigator.onLine) { setHandleFeedback('Handle removal requires a live connection so XOFT can stop its automation first.'); return; }
+      if (!window.confirm('Remove ' + item.handle + ' from XOFT? Autopilot will be stopped and scheduled posts for this account will be cancelled. This does not unlink the account from the social platform itself.')) return;
+      button.disabled = true;
+      try {
+        const result = await api.del('/api/social/handles/' + encodeURIComponent(id));
+        if (result?.__queued) { setHandleFeedback('Removal not confirmed: request queued offline. Reconnect and try again.'); return; }
+        await refreshHandles();
+        await refreshHandleHistory();
+        setHandleFeedback('Removed ' + item.handle + ' from XOFT. ' + (result.cancelledScheduledPosts || 0) + ' scheduled post(s) cancelled. The platform account itself was not changed.');
+      } catch (error) { setHandleFeedback('Could not remove handle: ' + error.message); }
+      finally { button.disabled = false; }
       return;
     }
     if (action === 'kill') {
