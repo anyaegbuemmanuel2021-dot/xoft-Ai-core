@@ -178,6 +178,8 @@ export class SocialHandleManager {
       try { draft = JSON.parse(String(generated.text ?? '').trim().replace(/^\x60{3}(?:json)?/i, '').replace(/\x60{3}$/,'').trim()); }
       catch { throw new Error('AI did not return valid post JSON; nothing was published.'); }
       const content = bounded(draft.content, 'generated post content', 10000);
+      const beforeQueue = this.get(id);
+      if (!manual && !beforeQueue?.autoEnabled) return { stopped: true, reason: 'Per-handle kill switch was activated before the post was queued.' };
       const post = this.socialMediaScheduler.create({
         title: safeText(draft.title || content.slice(0, 80), 180), content, platforms: [latest.platform],
         targetAccounts: [{ platform: latest.platform, profileId: latest.id, name: latest.displayName, handle: latest.handle }],
@@ -192,6 +194,10 @@ export class SocialHandleManager {
         publishInput: { platform: latest.platform, handle: latest.handle, autonomous: true },
       });
       const finished = this.get(id);
+      if (!manual && !finished?.autoEnabled) {
+        try { this.socialMediaScheduler.cancel(post.id); } catch { /* already in flight; report status honestly */ }
+        return { stopped: true, reason: 'Per-handle kill switch was activated while the post was being queued. Any still-queued post was cancelled.', post: this.socialMediaScheduler.get(post.id) };
+      }
       const next = { ...finished, lastRunAt: this.now().toISOString(), nextRunAt: new Date(this.now().getTime() + latest.intervalHours * 3600_000).toISOString(), lastPublishedAt: null, lastError: null, updatedAt: this.now().toISOString() };
       this._saveHandle(next);
       this._log('social_handle_autonomous_post_queued', { id, postId: post.id, platform: latest.platform, handle: latest.handle, scheduledAt: scheduleAt });
