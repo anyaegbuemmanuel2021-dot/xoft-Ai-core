@@ -162,7 +162,20 @@ export class SocialHandleManager {
     try {
       const raw = String(ai.text ?? '').trim().replace(/^\x60{3}(?:json)?/i, '').replace(/\x60{3}$/,'').trim();
       profile = JSON.parse(raw);
-    } catch { profile = { summary: String(ai.text ?? '').slice(0, 3000), voice: '', themes: [], formats: [], audience: '', callsToAction: [], avoid: [] }; }
+      if (!profile || typeof profile !== 'object' || Array.isArray(profile)) throw new Error('style profile must be a JSON object');
+      profile = {
+        summary: safeText(profile.summary, 800),
+        voice: safeText(profile.voice, 500),
+        themes: Array.isArray(profile.themes) ? profile.themes.slice(0, 12).map((x) => safeText(x, 160)).filter(Boolean) : [],
+        formats: Array.isArray(profile.formats) ? profile.formats.slice(0, 12).map((x) => safeText(x, 160)).filter(Boolean) : [],
+        audience: safeText(profile.audience, 500),
+        callsToAction: Array.isArray(profile.callsToAction) ? profile.callsToAction.slice(0, 10).map((x) => safeText(x, 160)).filter(Boolean) : [],
+        avoid: Array.isArray(profile.avoid) ? profile.avoid.slice(0, 12).map((x) => safeText(x, 160)).filter(Boolean) : [],
+      };
+      if (!profile.summary && !profile.voice && !profile.themes.length) throw new Error('style profile contained no useful style information');
+    } catch (error) {
+      throw new Error('XOFT could not build a valid style profile from the AI response: ' + safeText(error.message, 250) + '. No profile was saved.');
+    }
     const updated = this._saveHandle({ ...current, styleProfile: JSON.stringify(profile).slice(0, 8000), recentExamples: posts.slice(0, 15), learnedExamples: posts.length, lastScanAt: this.now().toISOString(), lastError: null, updatedAt: this.now().toISOString() });
     this._log('social_handle_learned', { id, platform: current.platform, handle: current.handle, examples: posts.length });
     return { handle: updated, examplesRead: posts.length, profile };
