@@ -96,7 +96,7 @@ The selected reply tool receives `platform`, `channel`, `externalId`, `conversat
 
 ## Multi-handle learning and autonomous posting
 
-The Social Studio now includes a per-handle control room backed by `src/social/SocialHandleManager.js`. Each saved handle stores its own platform, profile identifier, connector, exact content-reading tool, exact publishing tool, brand facts, goals, voice, learned style profile, run cadence, run history, and autonomy state in `social-handles.json` (or SQLite KV when configured).
+The Social Studio now includes a per-handle control room backed by `src/social/SocialHandleManager.js`. Each saved handle stores its own platform, profile identifier, connector, exact content-reading tool, exact publishing tool, brand facts, goals, voice, learned style profile, up to 15 recent public post examples for repetition avoidance, run cadence, run history, and autonomy state in `social-handles.json` (or SQLite KV when configured).
 
 ### Setup
 
