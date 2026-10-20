@@ -595,9 +595,9 @@ app.post('/api/social/generate-content', requireAdmin, async (req, res) => {
       temperature: 0.7,
     });
     const fullText = String(result.text ?? '').trim();
-    const match = fullText.match(/(?:^|\\n)HASHTAGS:\\s*(.*)$/is);
+    const match = fullText.match(/^HASHTAGS:\s*(.*)$/im);
     const content = (match ? fullText.slice(0, match.index) : fullText).trim();
-    const hashtags = match ? match[1].split(/[\\s,]+/).map((x) => x.replace(/^#/, '').replace(/[^\\p{L}\\p{N}_]/gu, '')).filter(Boolean).slice(0, 8) : [];
+    const hashtags = match ? match[1].split(/[\s,]+/).map((x) => x.replace(/^#/, '').replace(/[^A-Za-z0-9_]/g, '')).filter(Boolean).slice(0, 8) : [];
     if (!content) return res.status(502).json({ error: 'The configured model returned an empty draft.' });
     activityLog.log({ type: 'social_content_draft_generated', detail: { platforms, goal: req.body?.goal ?? 'engagement', provider: result.provider ?? null } });
     return res.json({ content, hashtags, provider: result.provider ?? null, saved: false, published: false });
