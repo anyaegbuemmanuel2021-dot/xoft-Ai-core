@@ -58,6 +58,27 @@ export async function render(container) {
       <p class="plugin-safety-note">Connect a publishing service through Plugins & Apps → server connector configuration. XOFT does not have native direct posting credentials for every social network. Scheduled publishing requires the server to stay online and the connector's tool to accept the post payload.</p>
     </section>
     <section class="card"><div class="plugin-section-head"><div><span class="plugin-kicker">CONTENT CALENDAR</span><h2>Post queue</h2></div><select id="social-filter"><option value="">All posts</option><option value="draft">Drafts</option><option value="scheduled">Scheduled</option><option value="published">Published</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></div><div id="social-list" class="social-list"><div class="empty">Loading calendar…</div></div></section>
+    <section class="card">
+      <div class="plugin-section-head"><div><span class="plugin-kicker">COMMUNITY MANAGEMENT</span><h2>Comments & direct messages</h2></div><span class="plugin-category">Inbox · AI reply drafts · approval before sending</span></div>
+      <p>Sync inbound comments and DMs from a connected account, draft helpful replies with XOFT, then approve the exact reply before it is sent. This requires a connector with permission to read the relevant inbox and reply on your behalf.</p>
+      <div class="plugin-form-grid">
+        <div class="form-row"><label for="social-platform-inbox">PLATFORM</label><select id="social-platform-inbox"><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="linkedin">LinkedIn</option><option value="x">X</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="threads">Threads</option></select></div>
+        <div class="form-row"><label for="social-comments-tool">COMMENTS READ TOOL</label><input id="social-comments-tool" list="social-tool-options" placeholder="Optional exact tool name" /></div>
+        <div class="form-row"><label for="social-dms-tool">DM INBOX READ TOOL</label><input id="social-dms-tool" list="social-tool-options" placeholder="Optional exact tool name" /></div>
+        <div class="form-row"><label for="social-reply-tool">COMMENT/DM REPLY TOOL</label><input id="social-reply-tool" list="social-tool-options" placeholder="Exact connector tool to send a reply" /></div>
+        <div class="form-row"><label for="social-reply-approver">APPROVED BY</label><input id="social-reply-approver" maxlength="120" placeholder="Your name" /></div>
+        <div class="form-row"><label for="social-reply-approval-note">APPROVAL NOTE</label><input id="social-reply-approval-note" maxlength="1000" placeholder="I reviewed and approve this exact reply" /></div>
+      </div>
+      <div class="social-actions"><button type="button" id="social-engagement-discover">Discover inbox/reply tools</button><button type="button" id="social-engagement-sync" class="primary">Sync comments & DMs</button><button type="button" id="social-engagement-refresh">Refresh inbox</button></div>
+      <p id="social-engagement-feedback" class="plugin-safety-note" aria-live="polite">Inbox sync imports only records returned by your connector. Nothing is automatically sent.</p>
+      <div class="plugin-form-grid">
+        <div class="form-row"><label for="social-engagement-select">INBOX ITEM</label><select id="social-engagement-select"><option value="">Select a comment or DM</option></select></div>
+        <div class="form-row"><label for="social-reply-context">OPTIONAL BUSINESS CONTEXT</label><input id="social-reply-context" maxlength="2000" placeholder="Services, policies, confirmed prices, response style" /></div>
+      </div>
+      <div class="form-row"><label for="social-reply-content">REPLY DRAFT</label><textarea id="social-reply-content" rows="4" maxlength="5000" placeholder="Select an inbox item, then generate or edit a reply…"></textarea></div>
+      <div class="social-actions"><button type="button" id="social-reply-generate" class="primary">Generate reply with XOFT</button><button type="button" id="social-reply-send">Approve & send reply</button><button type="button" id="social-engagement-ignore">Mark ignored</button></div>
+      <div id="social-engagement-list" class="social-list"><div class="empty">Loading inbox…</div></div>
+    </section>
   `;
 
   const $ = (id) => container.querySelector('#' + id);
