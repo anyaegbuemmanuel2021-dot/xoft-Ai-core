@@ -36,6 +36,9 @@ test('delivery lifecycle requires explicit proposal scope, client acceptance, de
       deliverables: ['Responsive website', 'Source code', 'Handover notes'],
     });
     assert.equal(p.stage, 'proposal_draft');
+    const brief = fs.readFileSync(path.join(p.workspacePath, 'PROJECT_BRIEF.md'), 'utf8');
+    assert.match(brief, /# Client Project Brief\n\n## Project/);
+    assert.doesNotMatch(brief, /\\n/, 'project brief must contain real line breaks, not literal \\n text');
     assert.match(p.proposalText, /DRAFT|PROJECT PROPOSAL/);
     const ready = f.manager.transition(p.id, 'submit_proposal', { note: 'Proposal prepared for sending' });
     assert.equal(ready.stage, 'awaiting_client_confirmation');
