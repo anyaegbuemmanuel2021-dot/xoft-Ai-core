@@ -609,6 +609,32 @@ app.post('/api/opportunities/follow-up-drafts/generate', (_req, res) => {
   try { res.json(opportunityFollowUpPlanner.generateDueDrafts()); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
+app.post('/api/opportunities/follow-up-drafts/:id/send-whatsapp', requireAdmin, async (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot send client outreach.' });
+  const draft = opportunityFollowUpPlanner.getDraft(req.params.id);
+  if (!draft) return res.status(404).json({ error: 'Follow-up draft not found' });
+  if (draft.status !== 'draft') return res.status(409).json({ error: 'This follow-up has already been sent or is no longer a draft.' });
+  const opportunity = opportunityStore.get(draft.opportunityId);
+  if (!opportunity) return res.status(404).json({ error: 'Opportunity not found' });
+  if (String(opportunity.contactChannel ?? '').toLowerCase() !== 'whatsapp') return res.status(400).json({ error: 'Set this opportunity contact channel to whatsapp before sending.' });
+  const phone = String(opportunity.contactPhone ?? '').replace(/[\\s().-]/g, '');
+  if (!/^\\+?[1-9]\\d{7,14}$/.test(phone)) return res.status(400).json({ error: 'A valid client WhatsApp number is required on the opportunity.' });
+  const approvedBy = String(req.body?.approvedBy ?? '').trim();
+  const consentEvidence = String(req.body?.consentEvidence ?? '').trim();
+  if (!approvedBy || approvedBy.length > 120) return res.status(400).json({ error: 'approvedBy is required for the audit record.' });
+  if (!consentEvidence || consentEvidence.length > 1000) return res.status(400).json({ error: 'Record evidence of the recipient’s WhatsApp opt-in before sending.' });
+  if (!whatsappService.isConfigured()) return res.status(503).json({ error: 'WhatsApp Cloud API is not configured.' });
+  try {
+    const result = await whatsappService.sendText({ to: phone.replace(/^\\+/, ''), message: draft.message });
+    if (!result.messageId) return res.status(502).json({ error: 'Provider did not return a message ID. Check WhatsApp delivery status before retrying to avoid duplicate outreach.' });
+    const sent = opportunityFollowUpPlanner.markSent(draft.id, { provider: result.provider, messageId: result.messageId, recipient: phone, approvedBy, consentEvidence });
+    activityLog.log({ type: 'opportunity_follow_up_send_requested', detail: { draftId: draft.id, opportunityId: draft.opportunityId, recipient: phone, provider: result.provider, messageId: result.messageId, approvedBy } });
+    return res.json({ success: true, draft: sent, note: 'Message accepted by WhatsApp Cloud API. This is not proof of delivery or read receipt; use webhook status updates.' });
+  } catch (err) {
+    activityLog.log({ type: 'opportunity_follow_up_send_failed', detail: { draftId: draft.id, error: String(err.message).slice(0, 400) } });
+    return res.status(502).json({ error: err.message });
+  }
+});
 app.get('/api/opportunities', (req, res) => {
   const { stage, q, limit } = req.query;
   res.json(opportunityStore.list({ stage, q, limit: limit ? Number(limit) : undefined }));
