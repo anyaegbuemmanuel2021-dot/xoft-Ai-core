@@ -14,6 +14,9 @@ jobs:
       - run: node --check test/projectDeliveryIntegration.test.js
       - run: node --check test/projectDeliveryManager.test.js
       - run: node --check src/social/SocialMediaScheduler.js
+      - run: node --check src/social/SocialEngagementManager.js
+      - run: node --check src/tools/builtins/socialEngagementTools.js
+      - run: node --check test/socialEngagementManager.test.js
       - run: node --check src/tools/builtins/socialTools.js
       - run: node --check test/socialMediaScheduler.test.js
       - run: node --check public/js/views/social.js
