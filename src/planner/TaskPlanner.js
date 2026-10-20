@@ -224,7 +224,7 @@ export class TaskPlanner {
     if (task.status === 'blocked') return task;
 
     const alreadyStarted = Boolean(task.startedAt);
-    task = this._updateTask(taskId, (t) => ({ ...t, status: 'running', startedAt: t.startedAt ?? new Date().toISOString() }));
+    task = this._updateTask(taskId, (t) => ({ ...t, status: 'running', verificationChallenge: null, startedAt: t.startedAt ?? new Date().toISOString() }));
     if (!alreadyStarted) this.eventBus?.emitEvent(EventType.TASK_STARTED, { taskId, goal: task.goal });
 
     for (const step of task.steps) {
@@ -364,7 +364,7 @@ export class TaskPlanner {
       if (err?.code === 'XOFT_VERIFICATION_REQUIRED') {
         const challenge = {
           type: String(err.challengeType || 'verification_required'),
-          url: /^https?:\\/\\//i.test(String(err.url || '')) ? String(err.url) : null,
+          url: /^https?:\/\//i.test(String(err.url || '')) ? String(err.url) : null,
           humanRequired: Boolean(err.humanRequired),
           message: String(err.message || 'A website verification is required.').slice(0, 1200),
           detectedAt: new Date().toISOString(),
