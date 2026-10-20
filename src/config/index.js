@@ -90,6 +90,15 @@ export const config = {
     braveApiKey: required('BRAVE_SEARCH_API_KEY'),
   },
 
+  browser: {
+    provider: String(required('BROWSER_PROVIDER', 'lightpanda')).toLowerCase(),
+    executablePath: required('LIGHTPANDA_EXECUTABLE_PATH', 'lightpanda'),
+    cdpUrl: required('LIGHTPANDA_CDP_URL', 'ws://127.0.0.1:9222'),
+    token: required('LPD_TOKEN', ''),
+    cloudRegion: required('LIGHTPANDA_CLOUD_REGION', 'euwest'),
+    timeoutMs: Math.max(1000, Number(required('LIGHTPANDA_TIMEOUT_MS', 30000))),
+  },
+
   voice: {
     elevenLabsApiKey: required('ELEVENLABS_API_KEY'),
     elevenLabsVoiceId: required('ELEVENLABS_VOICE_ID', '21m00Tcm4TlvDq8ikWAM'),
@@ -217,6 +226,7 @@ export function integrationStatus() {
   return {
     google: Boolean(config.google.clientId && config.google.clientSecret && config.google.refreshToken),
     braveSearch: Boolean(config.search.braveApiKey),
+    lightpanda: config.browser.provider === 'lightpanda' && Boolean(config.browser.token || config.browser.cdpUrl),
     elevenLabs: Boolean(config.voice.elevenLabsApiKey),
     whisper: Boolean(config.providers.openai.apiKey), // STT rides on the OpenAI key
     imageGeneration: Boolean(config.providers.openai.apiKey), // rides on the OpenAI key
