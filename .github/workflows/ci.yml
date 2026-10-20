@@ -9,6 +9,11 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm install
       - run: npm test
+      - run: node --check test/briefingIntegration.test.js
+      - run: node --check test/briefingScheduler.test.js
+      - run: node --check test/projectDeliveryIntegration.test.js
+      - run: node --check test/projectDeliveryManager.test.js
+      - run: node --check src/business/OpportunityScorer.js
       - run: node --check src/index.js
       - run: node --check src/scheduler/MissionAutopilot.js
       - run: node --check src/proactive/OpportunityScout.js
