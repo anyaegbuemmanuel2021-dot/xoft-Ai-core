@@ -4,15 +4,9 @@
 
 > **Railway deployment:** see [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md) for Docker build settings, production variables, persistent volume, health checks, and GitHub auto-deploy troubleshooting.
 
-Real, working backend for a JARVIS-style personal AI assistant. Every piece
-listed as done in `docs/FEATURE_COMPARISON.md` has been executed and
-verified live during development — booted, hit with real HTTP requests,
-checked for correct behavior with and without credentials. Nothing here
-simulates success.
+A JARVIS-style personal AI assistant backend with real persistence, tool execution, scheduling, and integration adapters. Feature status varies: a code path or passing unit test does not mean an external account is connected or that a provider integration has been verified live. Social publishing, comment/DM sync, and reply delivery require an authorized connector and account-specific mapping.
 
-Start with **`docs/FEATURE_COMPARISON.md`** for a one-page table of what's
-live, what needs a credential, and what's genuinely out of a backend's
-reach. This file is the setup guide.
+Start with **`docs/FEATURE_COMPARISON.md`** for a one-page table of implemented features, features needing credentials/connectors, and capabilities outside the backend's reach. This file is the setup guide.
 
 ---
 
