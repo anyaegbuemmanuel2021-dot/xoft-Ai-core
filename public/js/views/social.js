@@ -112,7 +112,7 @@ export async function render(container) {
     const visible = posts.filter((p) => !filter || p.status === filter);
     $('social-list').innerHTML = visible.length ? visible.map((p) => `
       <article class="social-post">
-        <div class="social-post-head"><div><strong>${safe(p.title)}</strong><div class="plugin-results">${safe(p.platforms.join(', '))} · ${safe(localTime(p.scheduledAt))}</div></div><span class="plugin-category">${safe(p.status)}</span></div>
+        <div class="social-post-head"><div><strong>${safe(p.title)}</strong><div class="plugin-results">${safe(p.platforms.join(', '))} · ${safe(localTime(p.scheduledAt))}</div>${p.targetAccounts?.length ? `<div class="plugin-results">Targets: ${safe(p.targetAccounts.map((account) => account.handle || account.name || account.profileId).join(', '))}</div>` : ''} </div><span class="plugin-category">${safe(p.status)}</span></div>
         <p>${safe(p.content.slice(0, 420))}${p.content.length > 420 ? '…' : ''}</p>
         ${p.lastError ? `<p class="social-error">Last error: ${safe(p.lastError)}</p>` : ''}
         ${p.publishedAt ? `<p class="plugin-safety-note">Provider confirmed at ${safe(localTime(p.publishedAt))}. Verify the live post URL in the connected service.</p>` : ''}
