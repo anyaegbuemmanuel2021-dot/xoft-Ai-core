@@ -65,3 +65,26 @@ All write endpoints require the XOFT admin credential; device-scoped credentials
 - Platform API permissions, account type, media requirements, rate limits, and scheduling rules are enforced by the connected provider/adapter.
 - A provider response alone may not prove a post is visible to the public. Verify the provider's post URL/status when available.
 - AI drafts can be wrong. Review business facts, prices, links, claims, copyright, and brand voice before approving.
+
+## Comments and direct messages inbox
+
+Social Studio can import comments and DMs through connector tools and prepare reply drafts. The connected account must grant the provider the relevant read and reply permissions. The core does not bypass social platform access controls.
+
+1. In Social Studio, choose the configured publishing/inbox connector.
+2. Use **Discover inbox/reply tools** and verify the returned tool names. Select the actual comment-list, inbox/DM-list, and reply tools; naming suggestions are only hints.
+3. Choose a platform and sync comments and/or DMs. The connector read tool must return an array or an object containing one of: `items`, `results`, `comments`, or `messages`. Each record needs an `id` / `commentId` / `messageId` and message text in `message` / `text` / `body` / `content`.
+4. Select an item and generate a suggested reply with XOFT, optionally providing verified business context. XOFT treats inbound text as untrusted and should not invent prices, policies, or commitments.
+5. Review the exact text, enter the approver and approval note, then confirm the send prompt. Sending is an external action and is never triggered just by syncing or drafting.
+
+### Connector reply contract
+
+The selected reply tool receives `platform`, `channel`, `externalId`, `conversationId`, `postUrl`, `message`, and `replyTo` in its input. The adapter must map these fields to the platform's actual API schema and return explicit acceptance evidence such as `{ "success": true, "messageId": "provider-reply-id" }` or `{ "status": "accepted", "id": "provider-reply-id" }`. Ambiguous connector responses do not mark an item replied. A recorded provider ID is not proof of delivery, visibility, or read receipt.
+
+### Privacy and limits
+
+- Imported message text is persisted in the XOFT data store. Use only accounts you own or are authorized to manage, and keep server storage and credentials private.
+- Direct-message access differs by platform, account type, permissions, app review, and provider. A connector may support publishing but not inbox reading or replies.
+- This feature does not silently read personal chats; it only imports what a configured connector explicitly returns.
+- Auto-replying to inbound messages without review is not enabled. Replies require explicit approval each time.
+- XOFT does not send unsolicited bulk DMs or bypass messaging windows, consent, rate limits, or platform policies.
+- No live social account was connected or used to verify this feature during implementation.
