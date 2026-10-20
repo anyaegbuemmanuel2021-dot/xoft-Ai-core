@@ -72,10 +72,11 @@ function taskRow(t) {
         ${statusBadge(t.status)}
       </div>
       <div class="muted" style="margin:4px 0;">${doneSteps}/${t.steps.length} steps · created ${fmtTime(t.createdAt)}${t.scheduledFor ? ' · scheduled for ' + fmtTime(t.scheduledFor) : ''}</div>
-      ${verification ? `<div class="muted" role="status" style="margin:6px 0;">Verification needed: ${esc(verification.verificationChallenge.type)}. ${esc(verification.verificationChallenge.message)}</div>` : ''}
+      ${verification ? `<div class="muted" role="status" style="margin:6px 0;">Verification needed: ${esc(verification.verificationChallenge.type)}. ${esc(verification.verificationChallenge.message)} Open the page if appropriate, then return and retry. The normal browser may not share its session with XOFT.</div>` : ''}
       <div class="inline" style="gap:6px; flex-wrap:wrap;">
         ${verification?.verificationChallenge.url ? `<a class="button" href="${esc(verification.verificationChallenge.url)}" target="_blank" rel="noopener noreferrer">Open page</a>` : ''}
-        ${t.status === 'planned' || t.status === 'blocked' || t.status === 'waiting_approval' || t.status === 'waiting_verification' ? `<button data-execute="${t.id}">Execute</button><button data-enqueue="${t.id}">Enqueue</button><button data-schedule="${t.id}">Schedule…</button>` : ''}
+        ${['planned', 'blocked', 'waiting_approval'].includes(t.status) ? `<button data-execute="${t.id}">Execute</button><button data-enqueue="${t.id}">Enqueue</button><button data-schedule="${t.id}">Schedule…</button>` : ''}
+        ${t.status === 'waiting_verification' ? `<button data-execute="${t.id}">Retry after verification</button>` : ''}
         ${!['completed', 'cancelled'].includes(t.status) ? `<button data-cancel="${t.id}" class="danger">Cancel</button>` : ''}
         <button data-executions="${t.id}">Executions</button>
       </div>
