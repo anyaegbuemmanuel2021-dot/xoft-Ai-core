@@ -60,13 +60,14 @@ test('per-handle kill switch disables future autonomy and cancels only that hand
     f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' });
     // Simulate the queued post being associated with this handle's generated id.
     const ownPost = { id: 'queued-own', status: 'scheduled', targetAccounts: [{ profileId: handle.handle, handleId: handle.id }] };
-    f.posts.push(ownPost);
+    f.posts.push(ownPost, { id: 'queued-manual', status: 'scheduled', targetAccounts: [{ platform: 'instagram', profileId: 'instagram:softly1810', handle: '@softly1810' }] });
     const result = f.manager.kill(handle.id, 'operator test');
     assert.equal(result.killed, true);
     assert.equal(result.handle.autoEnabled, false);
     assert.equal(result.handle.nextRunAt, null);
-    assert.equal(result.cancelledScheduledPosts, 1);
+    assert.equal(result.cancelledScheduledPosts, 2);
     assert.equal(ownPost.status, 'cancelled');
+    assert.ok(f.cancelled.includes('queued-manual'));
     assert.ok(!f.cancelled.includes('queued-other'));
   } finally { f.cleanup(); }
 });
