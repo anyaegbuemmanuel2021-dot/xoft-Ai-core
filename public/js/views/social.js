@@ -334,10 +334,12 @@ export async function render(container) {
       return;
     }
     if (action === 'kill') {
+      if (!navigator.onLine) { setHandleFeedback('KILL NOT SENT: XOFT must be online to confirm the server-side stop. Reconnect, then press KILL again.'); return; }
       if (!window.confirm('KILL AUTOPILOT FOR ' + item.handle + '? This disables future runs and cancels scheduled posts still queued for this handle. A post already accepted by the platform cannot be recalled.')) return;
       button.disabled = true;
       try {
         const result = await api.post('/api/social/handles/' + encodeURIComponent(id) + '/kill', { reason: 'Owner used per-handle KILL button' });
+        if (result?.__queued) { setHandleFeedback('KILL NOT CONFIRMED: the request was queued offline and the server has not confirmed the stop. Reconnect and press KILL again.'); return; }
         await refreshHandles();
         setHandleFeedback('KILL SWITCH ACTIVE for ' + item.handle + '. ' + (result.cancelledScheduledPosts || 0) + ' queued post(s) cancelled. Check the platform for any already accepted post.');
         toast('Handle autopilot stopped');
@@ -346,6 +348,7 @@ export async function render(container) {
       return;
     }
     if (action === 'autonomy') {
+      if (!navigator.onLine) { setHandleFeedback('XOFT must be online to change this handle\'s autonomy state.'); return; }
       if (item.autoEnabled) {
         try {
           await api.post('/api/social/handles/' + encodeURIComponent(id) + '/autonomy', { enabled: false });
@@ -358,7 +361,8 @@ export async function render(container) {
       if (!owner) { setHandleFeedback('Enter your name in OWNER CONFIRMATION NAME before enabling unsupervised posting.'); $('social-handle-owner').focus(); return; }
       if (!window.confirm('Enable UNSUPERVISED posting for ' + item.handle + '? XOFT will learn from the configured reader and publish original posts on the configured cadence without per-post approval. The handle has its own KILL button.')) return;
       try {
-        await api.post('/api/social/handles/' + encodeURIComponent(id) + '/autonomy', { enabled: true, confirmedBy: owner });
+        const result = await api.post('/api/social/handles/' + encodeURIComponent(id) + '/autonomy', { enabled: true, confirmedBy: owner });
+        if (result?.__queued) { setHandleFeedback('Autonomy not confirmed: request queued offline. Reconnect and try again.'); return; }
         await refreshHandles();
         setHandleFeedback('Autonomy enabled for ' + item.handle + '. XOFT will begin learning and queue a post when the next run succeeds.');
       } catch (error) { setHandleFeedback('Could not enable autonomy: ' + error.message); }
