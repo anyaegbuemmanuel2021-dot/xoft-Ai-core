@@ -106,11 +106,11 @@ export async function render(container) {
       <article class="row" style="display:block; padding:14px 0;">
         <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">
           <strong>${esc(item.title)}</strong>
-          ${badge(item.stage, item.stage === 'won' ? 'ok' : item.stage === 'lost' ? 'err' : item.stage === 'follow_up_due' ? 'warn' : '')}
+          ${badge(item.stage, item.stage === 'won' ? 'ok' : item.stage === 'lost' ? 'err' : item.stage === 'follow_up_due' ? 'warn' : '')}\n          ${item.priority ? badge(`${item.priority} priority${item.priorityScore == null ? '' : ` · ${item.priorityScore}/100`}`, item.priority === 'high' ? 'warn' : '') : ''}
         </div>
         <div class="muted" style="margin:5px 0">${esc(item.company || 'Company not set')} · ${esc(item.service || 'Service not set')}</div>
         ${item.sourceUrl ? `<div><a href="${esc(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">Open source</a></div>` : ''}
-        ${item.fitRationale ? `<p>${esc(item.fitRationale)}</p>` : ''}
+        ${item.fitRationale ? `<p>${esc(item.fitRationale)}</p>` : ''}\n        ${item.recommendedAction ? `<p class="muted">XOFT recommendation: ${esc(item.recommendedAction)}</p>` : ''}\n        ${item.riskFlags?.length ? `<div class="muted">Review flags: ${item.riskFlags.map(esc).join(', ')}</div>` : ''}
         <div class="muted">Estimated value: ${item.estimatedValue == null ? 'Not estimated' : '₦' + Number(item.estimatedValue).toLocaleString()} · Updated ${esc(fmtTime(item.updatedAt))}</div>
         ${item.nextAction ? `<div>Next: ${esc(item.nextAction)}</div>` : ''}
         ${item.nextFollowUpAt ? `<div class="muted">Follow-up: ${esc(fmtTime(item.nextFollowUpAt))}</div>` : ''}
