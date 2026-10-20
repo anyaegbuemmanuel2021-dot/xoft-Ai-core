@@ -454,6 +454,43 @@ app.get('/api/missions/:id/drift', (req, res) => {
 });
 
 // --- Opportunity pipeline: durable lead and client tracking ---
+app.post('/api/opportunities/discover', async (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot run business prospect research.' });
+  const query = String(req.body?.query ?? '').trim();
+  const count = Math.max(1, Math.min(10, Number(req.body?.count) || 5));
+  if (!query) return res.status(400).json({ error: 'query is required' });
+  try {
+    const searchResult = await toolRegistry.execute('search_web', { query, count }, { memory });
+    const results = Array.isArray(searchResult?.results) ? searchResult.results : [];
+    const saved = [];
+    let duplicates = 0;
+    let skipped = 0;
+    for (const result of results) {
+      if (!result?.title || !result?.url) { skipped++; continue; }
+      try {
+        const item = opportunityStore.create({
+          title: String(result.title).slice(0, 180),
+          sourceUrl: result.url,
+          service: query.slice(0, 180),
+          fitRationale: String(result.description ?? 'Search result only; inspect the source before qualifying this opportunity.').slice(0, 4000),
+          evidence: result.description ? [String(result.description).slice(0, 1000)] : [],
+          stage: 'researched',
+          nextAction: 'Open the source and verify the client, requirements, deadline, legitimacy, and payment terms before outreach.',
+        });
+        saved.push(item);
+      } catch (err) {
+        if (err.code === 'OPPORTUNITY_DUPLICATE') duplicates++;
+        else skipped++;
+      }
+    }
+    activityLog.log({ type: 'opportunity_discovery_completed', detail: { query, found: results.length, saved: saved.length, duplicates, skipped } });
+    eventBus.emitEvent('opportunity.discovery_completed', { query, saved: saved.length, duplicates, skipped });
+    return res.json({ query, searched: results.length, saved, duplicates, skipped, note: 'These are unqualified public search results, not verified clients or guaranteed income. Review each source before contacting anyone.' });
+  } catch (err) {
+    activityLog.log({ type: 'opportunity_discovery_failed', detail: { query, error: err.message } });
+    return res.status(502).json({ error: err.message, note: 'Web research is unavailable until the configured browser/search integration is reachable.' });
+  }
+});
 app.get('/api/opportunities/summary', (_req, res) => res.json(opportunityStore.summary()));
 app.get('/api/opportunities', (req, res) => {
   const { stage, q, limit } = req.query;
