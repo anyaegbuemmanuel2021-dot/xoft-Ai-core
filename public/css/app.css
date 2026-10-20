@@ -481,3 +481,16 @@ body:not([data-route="command"]) #content { overflow-y: auto; }
 .social-error{color:#ff9d9d}
 #social-payload{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 @media(max-width:640px){.social-post-head{flex-direction:column}.social-actions button{flex:1 1 100%}.social-platform{flex:1 1 40%}}
+
+
+/* XOFT per-handle social autonomy control room */
+.social-handle-dashboard{border-color:rgba(0,184,176,.28);box-shadow:0 16px 50px rgba(0,0,0,.12)}
+.social-handle-card{border-color:rgba(91,196,214,.2);background:linear-gradient(145deg,rgba(12,28,34,.94),rgba(8,17,22,.98))}
+.social-handle-card .plugin-results{overflow-wrap:anywhere}
+.social-handle-card .plugin-category{white-space:nowrap}
+.social-handle-card button.danger{border:1px solid rgba(255,75,90,.65);color:#ffd8dc;background:rgba(185,24,45,.2);font-weight:800;letter-spacing:.025em}
+.social-handle-card button.danger:hover{background:rgba(205,27,49,.42);border-color:#ff5b6b}
+.social-handle-card button:disabled{opacity:.42;cursor:not-allowed}
+.social-handle-card .social-actions{align-items:stretch}
+#social-handle-feedback{overflow-wrap:anywhere}
+@media(max-width:640px){.social-handle-card .social-actions button.danger{flex-basis:100%;min-height:46px}.social-handle-dashboard{padding:14px}}
