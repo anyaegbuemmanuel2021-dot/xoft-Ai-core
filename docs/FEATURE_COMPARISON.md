@@ -90,6 +90,7 @@ Status key:
 
 | 60 | Opportunity pipeline (persistent lead tracking + public search discovery) | PARTIAL — code and dashboard added; full CI/live search not yet verified | reachable `search_web` integration for discovery | `src/business/OpportunityStore.js`, `POST /api/opportunities/discover`, `public/js/views/opportunities.js` |
 | 61 | Persistent mission autopilot (deadline/priority-ranked background execution) | PARTIAL — scheduler/API/dashboard/tests added; runtime and full CI not yet verified; opt-in and disabled by default | healthy AI provider, hosted process, and missions in `created` or `planned` state; existing approvals/permissions remain enforced | `src/scheduler/MissionAutopilot.js`, `public/js/views/missions.js` |
+| 62 | Project delivery lifecycle (proposal, acceptance evidence, QA, handoff, invoice/payment evidence) | FOUNDATION ONLY — manager module exists but API/dashboard integration and tests are not complete; do not treat as an active user-facing feature | `src/business/ProjectDeliveryManager.js`; client acceptance, handoff, and payment must be supported by recorded evidence; no money is moved by this module |
 
 ## Mission autopilot verification note
 
