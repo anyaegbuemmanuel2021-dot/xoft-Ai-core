@@ -232,7 +232,7 @@ export class ProjectDeliveryManager {
     } else if (action === 'confirm_client_acceptance') {
       if (p.stage !== 'awaiting_client_confirmation') throw new Error('Project is not awaiting client confirmation');
       const evidence = text(input.evidence, 'evidence', 2000);
-      if (!evidence) throw new Error('Record how the client accepted (for example, message reference or written confirmation)');
+      if (!evidence) throw new Error('Record client acceptance evidence (for example, message reference or written confirmation)');
       next.acceptanceEvidence = evidence;
       next.stage = 'accepted';
       const mission = this.missionManager.create('Deliver client project: ' + p.title + '. Scope: ' + p.scope + '. Deliverables: ' + (p.deliverables.join('; ') || 'as agreed with client') + '. Deadline: ' + p.deadline + '.\n\n' + buildDeliverySkillBrief(p), { deadline: p.deadline, priority: 5, budget: { maxRuns: 5, maxFailures: 3 } });
