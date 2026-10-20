@@ -44,3 +44,10 @@ test('opportunity dashboard exposes stage progression and avoids claims of guara
   }
   assert.match(view, /Estimated value is not confirmed income/);
 });
+
+test('opportunity dashboard prioritizes overdue follow-ups and high-scoring leads', () => {
+  const view = read('../public/js/views/opportunities.js');
+  assert.match(view, /aOverdue/);
+  assert.match(view, /priorityScore/);
+  assert.match(view, /Number\.POSITIVE_INFINITY/);
+});
