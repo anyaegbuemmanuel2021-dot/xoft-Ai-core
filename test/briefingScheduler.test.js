@@ -73,3 +73,22 @@ test('records delivery failure without falsely marking the briefing delivered', 
     assert.equal(f.scheduler.getSettings().lastAttempt.status, 'failed');
   } finally { f.cleanup(); }
 });
+
+test('backs off failed delivery instead of retrying on every scheduler tick', async () => {
+  let calls = 0;
+  const f = setup({
+    now: new Date('2026-10-20T07:00:00.000Z'),
+    sendSms: async () => { calls++; throw new Error('provider unavailable'); },
+  });
+  try {
+    f.scheduler.updateSettings({ phoneNumber: '+2348012345678' });
+    await assert.rejects(f.scheduler.tick(), /provider unavailable/);
+    await f.scheduler.tick();
+    await f.scheduler.tick();
+    assert.equal(calls, 1);
+    const slot = f.scheduler.getSettings().attemptedSlots['2026-10-20:morning'];
+    assert.equal(slot.attempts, 1);
+    assert.equal(slot.status, 'failed');
+    assert.ok(slot.nextRetryAt);
+  } finally { f.cleanup(); }
+});
