@@ -353,6 +353,7 @@ export async function render(container) {
         if (result?.__queued) { setHandleFeedback('Removal not confirmed: request queued offline. Reconnect and try again.'); return; }
         await refreshHandles();
         await refreshHandleHistory();
+        await refresh();
         setHandleFeedback('Removed ' + item.handle + ' from XOFT. ' + (result.cancelledScheduledPosts || 0) + ' scheduled post(s) cancelled. The platform account itself was not changed.');
       } catch (error) { setHandleFeedback('Could not remove handle: ' + error.message); }
       finally { button.disabled = false; }
@@ -366,6 +367,7 @@ export async function render(container) {
         const result = await api.post('/api/social/handles/' + encodeURIComponent(id) + '/kill', { reason: 'Owner used per-handle KILL button' });
         if (result?.__queued) { setHandleFeedback('KILL NOT CONFIRMED: the request was queued offline and the server has not confirmed the stop. Reconnect and press KILL again.'); return; }
         await refreshHandles();
+        await refresh();
         setHandleFeedback('KILL SWITCH ACTIVE for ' + item.handle + '. ' + (result.cancelledScheduledPosts || 0) + ' queued post(s) cancelled. Check the platform for any already accepted post.');
         toast('Handle autopilot stopped');
       } catch (error) { setHandleFeedback('Kill request failed: ' + error.message); }
@@ -399,6 +401,8 @@ export async function render(container) {
       try {
         const result = await api.post('/api/social/handles/' + encodeURIComponent(id) + (action === 'learn' ? '/learn' : '/run'), {});
         await refreshHandles();
+        await refresh();
+        await refreshHandleHistory();
         if (action === 'learn') setHandleFeedback('XOFT analyzed ' + result.examplesRead + ' post example(s) for ' + item.handle + '. Review the saved style profile in the handle card.');
         else setHandleFeedback(result.note || 'Autonomous cycle finished. Check the post queue and connector result.');
       } catch (error) { setHandleFeedback((action === 'learn' ? 'Learning failed: ' : 'Autonomous run failed: ') + error.message); await refreshHandles().catch(() => {}); }
