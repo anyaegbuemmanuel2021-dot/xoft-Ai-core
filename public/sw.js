@@ -43,6 +43,7 @@ const SHELL_FILES = [
   '/js/views/tasks.js',
   '/js/views/missions.js',
   '/js/views/opportunities.js',
+  '/js/views/social.js',
   '/js/views/memory.js',
   '/js/views/devices.js',
   '/js/views/approvals.js',
