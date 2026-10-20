@@ -8,6 +8,7 @@ const DEFAULTS = Object.freeze({
   channel: 'sms',
   phoneNumber: '',
   lastDelivered: {},
+  attemptedSlots: {},
   lastAttempt: null,
 });
 
@@ -66,7 +67,7 @@ export class BriefingScheduler {
   getSettings() {
     const data = this.store.load();
     const saved = data.settings ?? {};
-    return { ...DEFAULTS, ...saved, lastDelivered: saved.lastDelivered ?? {} };
+    return { ...DEFAULTS, ...saved, lastDelivered: saved.lastDelivered ?? {}, attemptedSlots: saved.attemptedSlots ?? {} };
   }
 
   updateSettings(patch) {
@@ -121,10 +122,29 @@ export class BriefingScheduler {
     for (const [type, time] of [['morning', settings.morningTime], ['evening', settings.eveningTime]]) {
       const target = Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
       const key = `${date}:${type}`;
-      if (minute < target || minute > target + 4 || settings.lastDelivered[key]) continue;
+      const attempt = settings.attemptedSlots?.[key];
+      if (minute < target || minute > target + 30 || settings.lastDelivered[key]) continue;
+      if (attempt?.attempts >= 3) continue;
+      if (attempt?.nextRetryAt && now.getTime() < Date.parse(attempt.nextRetryAt)) continue;
+      const attemptNumber = (attempt?.attempts ?? 0) + 1;
+      const current = this.getSettings();
+      current.attemptedSlots = { ...(current.attemptedSlots ?? {}), [key]: { attempts: attemptNumber, lastAttemptAt: now.toISOString(), status: 'sending', nextRetryAt: null } };
+      this.store.save({ settings: current });
       this.inFlight = true;
       try {
-        await this.deliver(type, date, settings);
+        await this.deliver(type, date, this.getSettings());
+      } catch (err) {
+        const after = this.getSettings();
+        const delays = [60_000, 5 * 60_000];
+        after.attemptedSlots = { ...(after.attemptedSlots ?? {}), [key]: {
+          attempts: attemptNumber,
+          lastAttemptAt: now.toISOString(),
+          status: 'failed',
+          error: String(err.message).slice(0, 300),
+          nextRetryAt: attemptNumber < 3 ? new Date(now.getTime() + delays[attemptNumber - 1]).toISOString() : null,
+        } };
+        this.store.save({ settings: after });
+        throw err;
       } finally {
         this.inFlight = false;
       }
@@ -159,6 +179,7 @@ export class BriefingScheduler {
       const current = this.getSettings();
       const key = `${date}:${type}`;
       current.lastDelivered = { ...(current.lastDelivered ?? {}), [key]: result.at };
+      current.attemptedSlots = { ...(current.attemptedSlots ?? {}), [key]: { ...(current.attemptedSlots?.[key] ?? {}), status: 'accepted', lastAttemptAt: result.at, nextRetryAt: null } };
       current.lastAttempt = { ...result, message: undefined };
       this.store.save({ settings: current });
       this.activityLog?.log({ type: 'executive_briefing_delivered', detail: { ...result, messageLength: message.length } });
