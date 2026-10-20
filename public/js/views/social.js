@@ -98,6 +98,15 @@ export async function render(container) {
     } catch (error) { setFeedback('Content generation failed: ' + error.message); }
     finally { $('social-generate').disabled = false; }
   });
+  $('social-post-select').addEventListener('change', () => {
+    const selected = posts.find((item) => item.id === $('social-post-select').value);
+    if (!selected) return;
+    $('social-brief').value = selected.title ?? '';
+    $('social-content').value = selected.content ?? '';
+    $('social-hashtags').value = (selected.hashtags ?? []).join(', ');
+    container.querySelectorAll('input[name="social-platform"]').forEach((el) => { el.checked = selected.platforms.includes(el.value); });
+    setFeedback('Loaded saved post. Make changes, then save to update the selected draft.');
+  });
   $('social-save').addEventListener('click', async () => {
     try {
       const content = $('social-content').value.trim();
