@@ -186,16 +186,11 @@ export const config = {
     },
   },
 
-  // Optional global override of ProviderRouter's per-task-type preference
-  // lists (see ProviderRouter._preferenceFor). When aiRouting.primaryProvider
-  // is unset (the default), the router keeps its existing task-aware
-  // ordering — e.g. Claude first for reasoning, OpenAI-fast first for
-  // simple tasks — which is more useful than one global order. Setting it
-  // pins a single provider first for EVERY task type instead; fallback
-  // beyond it is only used when aiRouting.fallbackEnabled is true (default
-  // true, matching the router's existing behavior), so a user who wants a
-  // hard "never silently switch providers" guarantee can set
-  // AI_FALLBACK_ENABLED=false and know only their chosen primary is ever tried.
+  // Global provider preference for every task type. Default is OpenAI first, then
+  // configured fallbacks in order (Gemini first, followed by optional free/other
+  // gateways). This makes quota/outage fallback predictable across the app.
+  // Override AI_PRIMARY_PROVIDER / AI_FALLBACK_PROVIDERS to change the order.
+  // Set AI_FALLBACK_ENABLED=false to disable cloud fallbacks.
   aiRouting: {
     fallbackEnabled: String(required('AI_FALLBACK_ENABLED', 'true')).toLowerCase() === 'true',
     primaryProvider: required('AI_PRIMARY_PROVIDER', 'openai'),
