@@ -2096,6 +2096,8 @@ const shutdown = (signal) => {
   realtimeServer?.stop();
   systemWatchdog?.stop();
   killSwitch?.stop();
+  socialHandleManager?.stop();
+  socialMediaScheduler?.stop();
   // Detach from engine tasks (they are recovered on next start) and stop any Hermes process Xoft itself started.
   Promise.resolve(engineTaskManager?.shutdown()).then(() => engineRegistry?.shutdown()).catch(() => {});
   server.close(() => { durableStore?.close(); process.exit(0); });
