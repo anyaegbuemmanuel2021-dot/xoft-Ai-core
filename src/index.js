@@ -684,10 +684,12 @@ app.post('/api/social/handles/:id/run', requireAdmin, async (req, res) => {
   try { return res.json(await socialHandleManager.runHandle(req.params.id)); }
   catch (err) { return res.status(502).json({ error: err.message }); }
 });
-app.post('/api/social/handles/:id/autonomy', requireAdmin, (req, res) => {
+app.post('/api/social/handles/:id/autonomy', requireAdmin, async (req, res) => {
   if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot enable social autopilot.' });
   try {
-    const item = socialHandleManager.setAutonomy(req.params.id, req.body?.enabled === true, { confirmedBy: req.body?.confirmedBy });
+    const enabled = req.body?.enabled === true;
+    if (enabled) await socialHandleManager.validateTools(req.params.id);
+    const item = socialHandleManager.setAutonomy(req.params.id, enabled, { confirmedBy: req.body?.confirmedBy });
     if (!item) return res.status(404).json({ error: 'Social handle not found' });
     return res.json(item);
   } catch (err) { return res.status(400).json({ error: err.message }); }
@@ -1062,7 +1064,7 @@ app.post('/api/whatsapp/status-draft', (req, res) => {
 // --- Tools ---
 // GET /api/tools -> list registered tools with risk level and implementation status
 app.get('/api/connectors', (_req, res) => res.json(connectorManager.list()));
-app.get('/api/connectors/:id/tools', async (req, res) => { try { res.json(await connectorManager.discover(req.params.id)); } catch (err) { res.status(400).json({ error: err.message }); } });
+app.get('/api/connectors/:id/tools', requireAdmin, (req, res) => { if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot discover private connector tools.' }); return connectorManager.discover(req.params.id).then((tools) => res.json(tools)).catch((err) => res.status(400).json({ error: err.message })); });
 
 app.get('/api/tools', (_req, res) => {
   res.json(toolRegistry.list().map((t) => ({ ...t, domain: domainForTool(t.name) })));
