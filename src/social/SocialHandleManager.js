@@ -60,7 +60,7 @@ export class SocialHandleManager {
       tone: safeText(input.tone || 'Professional, helpful and clear', 300), connectorId: safeText(input.connectorId, 100),
       readTool: safeText(input.readTool, 120), publishTool: safeText(input.publishTool, 120),
       autoEnabled: false, intervalHours: Math.max(12, Math.min(168, Number(input.intervalHours) || 24)),
-      styleProfile: '', learnedExamples: 0, lastScanAt: null, lastRunAt: null, nextRunAt: null,
+      styleProfile: '', recentExamples: [], learnedExamples: 0, lastScanAt: null, lastRunAt: null, nextRunAt: null,
       lastPublishedAt: null, lastError: null, createdAt: now, updatedAt: now, stoppedAt: null,
     };
     this._saveHandle(item);
@@ -150,7 +150,7 @@ export class SocialHandleManager {
       const raw = String(ai.text ?? '').trim().replace(/^\x60{3}(?:json)?/i, '').replace(/\x60{3}$/,'').trim();
       profile = JSON.parse(raw);
     } catch { profile = { summary: String(ai.text ?? '').slice(0, 3000), voice: '', themes: [], formats: [], audience: '', callsToAction: [], avoid: [] }; }
-    const updated = this._saveHandle({ ...current, styleProfile: JSON.stringify(profile).slice(0, 8000), learnedExamples: posts.length, lastScanAt: this.now().toISOString(), lastError: null, updatedAt: this.now().toISOString() });
+    const updated = this._saveHandle({ ...current, styleProfile: JSON.stringify(profile).slice(0, 8000), recentExamples: posts.slice(0, 15), learnedExamples: posts.length, lastScanAt: this.now().toISOString(), lastError: null, updatedAt: this.now().toISOString() });
     this._log('social_handle_learned', { id, platform: current.platform, handle: current.handle, examples: posts.length });
     return { handle: updated, examplesRead: posts.length, profile };
   }
@@ -171,7 +171,7 @@ export class SocialHandleManager {
         temperature: 0.75,
         messages: [
           { role: 'system', content: 'You are an autonomous social content editor. Create one original, platform-appropriate post inspired by the learned style guide without copying sample wording. Use only confirmed brand context. Never invent prices, guarantees, client results, discounts, facts, or offers. Avoid spam, engagement bait, misleading claims, and hashtags unrelated to the topic. Return JSON only: {"title":"...","content":"...","hashtags":["..."]}.' },
-          { role: 'user', content: JSON.stringify({ platform: latest.platform, handle: latest.handle, brandContext: latest.brandContext, goals: latest.goals, tone: latest.tone, learnedStyle: profile, previousPostContext: 'Create a fresh post, not a paraphrase of any one example.' }) },
+          { role: 'user', content: JSON.stringify({ platform: latest.platform, handle: latest.handle, brandContext: latest.brandContext, goals: latest.goals, tone: latest.tone, learnedStyle: profile, recentExamples: latest.recentExamples ?? [], previousPostContext: 'Create a fresh post, not a paraphrase of any one example. Avoid repeating recent topics/headlines verbatim and vary the format where appropriate.' }) },
         ],
       });
       let draft;
