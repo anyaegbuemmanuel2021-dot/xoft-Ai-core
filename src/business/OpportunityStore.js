@@ -63,12 +63,24 @@ function normalize(input, { partial = false } = {}) {
     } else if (field === 'sourceUrl') out.sourceUrl = normalizeSourceUrl(value);
     else if (field === 'estimatedValue' || field === 'costEstimate') out[field] = optionalMoney(value, field);
     else if (field === 'nextFollowUpAt') out.nextFollowUpAt = optionalDate(value, field);
-    else if (field === 'evidence') {
+    else if (field === 'priorityScore') {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < 0 || n > 100) throw new Error('priorityScore must be between 0 and 100');
+      out.priorityScore = Math.round(n);
+    } else if (field === 'riskFlags') {
+      if (!Array.isArray(value)) throw new Error('riskFlags must be a list');
+      out.riskFlags = value.slice(0, 20).map((v) => cleanText(v, 'risk flag', 120)).filter(Boolean);
+    } else if (field === 'evidence') {
       if (!Array.isArray(value)) throw new Error('evidence must be a list of source/evidence strings');
       out.evidence = value.slice(0, 20).map((v) => cleanText(v, 'evidence item', 1000)).filter(Boolean);
     } else {
-      const max = field === 'title' || field === 'company' || field === 'service' ? 180 : field === 'notes' || field === 'fitRationale' ? 4000 : 1000;
-      out[field] = cleanText(value, field, max);
+      if (field === 'priority') {
+        if (!['low', 'medium', 'high'].includes(value)) throw new Error('priority must be low, medium, or high');
+        out.priority = value;
+      } else {
+        const max = field === 'title' || field === 'company' || field === 'service' ? 180 : field === 'notes' || field === 'fitRationale' || field === 'recommendedAction' ? 4000 : 1000;
+        out[field] = cleanText(value, field, max);
+      }
     }
   }
   if (!partial && !out.title) throw new Error('title is required');
@@ -130,6 +142,10 @@ export class OpportunityStore {
       nextFollowUpAt: fields.nextFollowUpAt ?? null,
       notes: fields.notes ?? '',
       contactChannel: fields.contactChannel ?? '',
+      priorityScore: fields.priorityScore ?? null,
+      priority: fields.priority ?? 'medium',
+      riskFlags: fields.riskFlags ?? [],
+      recommendedAction: fields.recommendedAction ?? '',
       createdAt: now,
       updatedAt: now,
       history: [{ stage: fields.stage ?? 'researched', at: now, note: 'Opportunity created' }],
