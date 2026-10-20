@@ -78,9 +78,13 @@ export async function render(container) {
     const button = container.querySelector('#opp-discover');
     button.disabled = true;
     button.textContent = 'Searching…';
-    const result = await guarded(() => api.post('/api/opportunities/discover', { query, count: 5 }), 'Discover opportunities');
-    button.disabled = false;
-    button.textContent = 'Search and save leads';
+    let result;
+    try {
+      result = await guarded(() => api.post('/api/opportunities/discover', { query, count: 5 }), 'Discover opportunities');
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Search and save leads';
+    }
     if (result?.__queued) {
       toast('Research needs a live connection; no results have been confirmed', 'warn');
       return;
