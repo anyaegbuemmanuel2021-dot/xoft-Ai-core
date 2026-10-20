@@ -10,6 +10,7 @@ function fixture(replyResult = { success: true, messageId: 'reply-123', status: 
   const calls = [];
   const connectorManager = {
     get(id) { if (id !== 'social') throw new Error('unknown connector'); return { id, enabled: true }; },
+    async discover() { return { tools: [{ name: 'send_reply' }, { name: 'reply_comment' }] }; },
     async call(id, args) { calls.push({ id, ...args }); return { success: true, result: replyResult }; },
   };
   const manager = new SocialEngagementManager({ dataDir, connectorManager, activityLog: { log() {} }, now: () => new Date('2026-10-20T10:00:00.000Z') });
