@@ -17,6 +17,7 @@ function platformChecks(selected = ['facebook', 'instagram', 'linkedin']) {
 export async function render(container) {
   let summary = { total: 0, drafts: 0, scheduled: 0, published: 0, failed: 0, connectors: [] };
   let posts = [];
+  let engagementItems = [];
   try {
     [summary, posts] = await Promise.all([api.get('/api/social/summary'), api.get('/api/social/posts')]);
   } catch (error) {
@@ -187,4 +188,120 @@ export async function render(container) {
       await refresh(); toast('Post cancelled');
     } catch (error) { setFeedback('Cancel failed: ' + error.message); }
   });
+
+
+  const engagementFeedback = (message) => { $('social-engagement-feedback').textContent = message; };
+  const renderEngagement = () => {
+    const current = $('social-engagement-select').value;
+    $('social-engagement-select').innerHTML = '<option value="">Select a comment or DM</option>' + engagementItems.filter((item) => !['replied', 'ignored'].includes(item.status)).map((item) => `<option value="${safe(item.id)}">${safe(item.platform)} · ${safe(item.channel)} · ${safe(item.senderName || 'Unknown sender')} · ${safe(item.status)}</option>`).join('');
+    if (engagementItems.some((item) => item.id === current)) $('social-engagement-select').value = current;
+    $('social-engagement-list').innerHTML = engagementItems.length ? engagementItems.map((item) => `
+      <article class="social-post">
+        <div class="social-post-head"><div><strong>${safe(item.senderName || 'Unknown sender')} · ${safe(item.platform)} ${safe(item.channel)}</strong><div class="plugin-results">${safe(localTime(item.receivedAt))} · ${safe(item.status)}</div></div><span class="plugin-category">${safe(item.status)}</span></div>
+        <p>${safe(item.message)}</p>
+        ${item.postUrl ? `<p><a href="${safe(item.postUrl)}" target="_blank" rel="noopener noreferrer">Open original post/conversation</a></p>` : ''}
+        ${item.replyDraft ? `<p><strong>Reply draft:</strong> ${safe(item.replyDraft)}</p>` : ''}
+        ${item.replySentAt ? `<p class="plugin-safety-note">Connector accepted reply at ${safe(localTime(item.replySentAt))}. This does not prove the recipient read it.</p>` : ''}
+        <div class="social-actions"><button type="button" data-engagement-select="${safe(item.id)}">Review / reply</button></div>
+      </article>`).join('') : '<div class="empty">No comments or DMs imported yet. Select a connector, discover its tools, and sync the inbox.</div>';
+  };
+  const refreshEngagement = async () => {
+    const [summary, items] = await Promise.all([api.get('/api/social/engagement/summary'), api.get('/api/social/engagement')]);
+    engagementItems = items;
+    renderEngagement();
+    engagementFeedback(`Inbox loaded: ${summary.open} open, ${summary.drafted} drafted, ${summary.replied} replied. Only connected-platform records are included.`);
+  };
+  $('social-engagement-discover').addEventListener('click', async () => {
+    const connectorId = $('social-connector').value;
+    if (!connectorId) return engagementFeedback('Choose a configured connector in the Publishing Connection section first.');
+    $('social-engagement-discover').disabled = true;
+    engagementFeedback('Discovering connector tools…');
+    try {
+      const discovered = await api.get('/api/connectors/' + encodeURIComponent(connectorId) + '/tools');
+      const tools = Array.isArray(discovered?.tools) ? discovered.tools : Array.isArray(discovered?.result?.tools) ? discovered.result.tools : [];
+      const names = tools.map((tool) => typeof tool === 'string' ? tool : tool.name).filter(Boolean);
+      $('social-tool-options').innerHTML = names.map((name) => '<option value="' + safe(name) + '">').join('');
+      const choose = (patterns) => names.find((name) => patterns.some((pattern) => pattern.test(name))) ?? '';
+      if (!$('social-comments-tool').value) $('social-comments-tool').value = choose(/comment.*(list|read|fetch|get)|(?:list|read|fetch|get).*comment/i ? [/comment.*(list|read|fetch|get)/i, /(?:list|read|fetch|get).*comment/i] : []);
+      if (!$('social-dms-tool').value) $('social-dms-tool').value = choose([/direct.*message.*(list|read|fetch|get)/i, /(?:inbox|message|dm).*(list|read|fetch|get)/i, /(?:list|read|fetch|get).*(inbox|message|dm)/i]);
+      if (!$('social-reply-tool').value) $('social-reply-tool').value = choose([/(reply|respond).*(comment|message|dm)/i, /(comment|message|dm).*(reply|respond|send)/i]);
+      engagementFeedback(names.length ? 'Found ' + names.length + ' connector tool(s). Confirm the selected tools really read the chosen account and send a reply.' : 'No tools returned. Check the connector configuration and discovery response.');
+    } catch (error) { engagementFeedback('Tool discovery failed: ' + error.message); }
+    finally { $('social-engagement-discover').disabled = false; }
+  });
+  $('social-engagement-sync').addEventListener('click', async () => {
+    const connectorId = $('social-connector').value;
+    const commentsTool = $('social-comments-tool').value.trim();
+    const dmsTool = $('social-dms-tool').value.trim();
+    if (!connectorId) return engagementFeedback('Choose a configured connector first.');
+    if (!commentsTool && !dmsTool) return engagementFeedback('Discover and select at least one comments or DM read tool.');
+    $('social-engagement-sync').disabled = true;
+    engagementFeedback('Syncing authorized comments and messages…');
+    try {
+      const result = await api.post('/api/social/engagement/sync', { connectorId, commentsTool, dmsTool, platform: $('social-platform-inbox').value });
+      await refreshEngagement();
+      engagementFeedback(`Sync completed. ${result.count} item(s) imported or refreshed from ${safe(result.platform)}. Review each item before replying.`);
+    } catch (error) { engagementFeedback('Inbox sync failed: ' + error.message); }
+    finally { $('social-engagement-sync').disabled = false; }
+  });
+  $('social-engagement-refresh').addEventListener('click', () => refreshEngagement().catch((e) => engagementFeedback('Inbox refresh failed: ' + e.message)));
+  $('social-engagement-select').addEventListener('change', () => {
+    const item = engagementItems.find((candidate) => candidate.id === $('social-engagement-select').value);
+    if (!item) return;
+    $('social-reply-content').value = item.replyDraft ?? '';
+    engagementFeedback('Selected ' + item.channel + ' from ' + item.platform + '. Generate or edit a reply; nothing is sent until you approve it.');
+  });
+  $('social-engagement-list').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-engagement-select]');
+    if (!button) return;
+    $('social-engagement-select').value = button.dataset.engagementSelect;
+    $('social-engagement-select').dispatchEvent(new Event('change'));
+    $('social-engagement-select').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  $('social-reply-generate').addEventListener('click', async () => {
+    const id = $('social-engagement-select').value;
+    if (!id) return engagementFeedback('Select a comment or DM first.');
+    $('social-reply-generate').disabled = true;
+    engagementFeedback('XOFT is drafting a reply…');
+    try {
+      const result = await api.post('/api/social/engagement/' + encodeURIComponent(id) + '/draft', { businessContext: $('social-reply-context').value });
+      $('social-reply-content').value = result.item.replyDraft ?? '';
+      await refreshEngagement();
+      $('social-engagement-select').value = id;
+      engagementFeedback('Reply draft prepared. Check facts, tone, and commitments before sending.');
+    } catch (error) { engagementFeedback('Reply drafting failed: ' + error.message); }
+    finally { $('social-reply-generate').disabled = false; }
+  });
+  $('social-reply-send').addEventListener('click', async () => {
+    const id = $('social-engagement-select').value;
+    if (!id) return engagementFeedback('Select an inbox item first.');
+    if (!$('social-reply-content').value.trim()) return engagementFeedback('Write or generate the reply first.');
+    if (!$('social-reply-approver').value.trim() || !$('social-reply-approval-note').value.trim()) return engagementFeedback('Enter who approves this exact reply and an approval note.');
+    if (!$('social-connector').value || !$('social-reply-tool').value.trim()) return engagementFeedback('Choose a configured connector and its reply tool.');
+    if (!window.confirm('Send this exact reply to the selected social comment or DM?')) return;
+    $('social-reply-send').disabled = true;
+    engagementFeedback('Submitting approved reply through connector…');
+    try {
+      const result = await api.post('/api/social/engagement/' + encodeURIComponent(id) + '/reply', {
+        connectorId: $('social-connector').value, replyTool: $('social-reply-tool').value.trim(),
+        reply: $('social-reply-content').value, approvedBy: $('social-reply-approver').value.trim(),
+        approvalNote: $('social-reply-approval-note').value.trim(),
+      });
+      await refreshEngagement();
+      $('social-engagement-select').value = id;
+      engagementFeedback(result.note ?? 'Connector accepted reply request. Check the connected platform to verify visibility.');
+      toast('Reply submitted to connector');
+    } catch (error) { engagementFeedback('Reply submission failed: ' + error.message + '. Check the connector before retrying to avoid duplicates.'); }
+    finally { $('social-reply-send').disabled = false; }
+  });
+  $('social-engagement-ignore').addEventListener('click', async () => {
+    const id = $('social-engagement-select').value;
+    if (!id) return engagementFeedback('Select an inbox item first.');
+    try {
+      await api.post('/api/social/engagement/' + encodeURIComponent(id) + '/ignore', {});
+      await refreshEngagement();
+      engagementFeedback('Item marked ignored.');
+    } catch (error) { engagementFeedback('Could not update inbox item: ' + error.message); }
+  });
+  refreshEngagement().catch((error) => engagementFeedback('Inbox not available: ' + error.message));
 }
