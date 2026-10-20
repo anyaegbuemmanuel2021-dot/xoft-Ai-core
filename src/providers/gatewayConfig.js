@@ -4,11 +4,12 @@
  * a missing or malformed setting is a provider-level *state*, never an application-level fatal error.
  */
 
-export const GATEWAY_IDS = ['freellmapi', 'litellm'];
+export const GATEWAY_IDS = ['freellmapi', 'litellm', 'openrouter'];
 
 export const GATEWAY_DEFAULTS = {
   freellmapi: { baseUrl: 'http://localhost:3001/v1', model: 'auto', requiresKey: true, label: 'FreeLLMAPI' },
   litellm: { baseUrl: 'http://localhost:4000/v1', model: '', requiresKey: false, label: 'LiteLLM' },
+  openrouter: { baseUrl: 'https://openrouter.ai/api/v1', model: 'openrouter/free', requiresKey: true, label: 'OpenRouter (free models)' },
 };
 
 export const envBool = (v, dflt = false) => (v === undefined || v === null || v === '' ? dflt : ['1', 'true', 'yes', 'on'].includes(String(v).trim().toLowerCase()));
