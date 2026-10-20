@@ -219,6 +219,7 @@ export class SocialHandleManager {
     if (this.timer) return;
     this.timer = setInterval(() => this.tick().catch(() => {}), 60_000);
     this.timer.unref?.();
+    this.tick().catch(() => {});
   }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
   _log(type, detail) {
