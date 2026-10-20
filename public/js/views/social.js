@@ -9,6 +9,7 @@ const PLATFORMS = [
 ];
 const localTime = (value) => value ? new Date(value).toLocaleString() : 'Not set';
 const safe = (value) => esc(String(value ?? ''));
+const safeHref = (value) => { try { const url = new URL(String(value)); return ['http:', 'https:'].includes(url.protocol) ? esc(url.href) : ''; } catch { return ''; } };
 
 function platformChecks(selected = ['facebook', 'instagram', 'linkedin']) {
   return PLATFORMS.map(([id, label]) => `<label class="social-platform"><input type="checkbox" name="social-platform" value="${id}" ${selected.includes(id) ? 'checked' : ''}><span>${label}</span></label>`).join('');
@@ -199,7 +200,7 @@ export async function render(container) {
       <article class="social-post">
         <div class="social-post-head"><div><strong>${safe(item.senderName || 'Unknown sender')} · ${safe(item.platform)} ${safe(item.channel)}</strong><div class="plugin-results">${safe(localTime(item.receivedAt))} · ${safe(item.status)}</div></div><span class="plugin-category">${safe(item.status)}</span></div>
         <p>${safe(item.message)}</p>
-        ${item.postUrl ? `<p><a href="${safe(item.postUrl)}" target="_blank" rel="noopener noreferrer">Open original post/conversation</a></p>` : ''}
+        ${safeHref(item.postUrl) ? `<p><a href="${safeHref(item.postUrl)}" target="_blank" rel="noopener noreferrer">Open original post/conversation</a></p>` : ''}
         ${item.replyDraft ? `<p><strong>Reply draft:</strong> ${safe(item.replyDraft)}</p>` : ''}
         ${item.replySentAt ? `<p class="plugin-safety-note">Connector accepted reply at ${safe(localTime(item.replySentAt))}. This does not prove the recipient read it.</p>` : ''}
         <div class="social-actions"><button type="button" data-engagement-select="${safe(item.id)}">Review / reply</button></div>
