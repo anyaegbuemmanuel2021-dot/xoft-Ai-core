@@ -141,7 +141,20 @@ export async function render(container) {
 
   const body = container.querySelector('#opp-list');
   const paintList = (query = '') => {
-    const filtered = opportunities.filter((item) => [item.title, item.company, item.service, item.fitRationale].some((v) => String(v ?? '').toLowerCase().includes(query.toLowerCase())));
+    const now = Date.now();
+    const filtered = opportunities
+      .filter((item) => [item.title, item.company, item.service, item.fitRationale].some((v) => String(v ?? '').toLowerCase().includes(query.toLowerCase())))
+      .sort((a, b) => {
+        const aOverdue = a.nextFollowUpAt && Date.parse(a.nextFollowUpAt) <= now && !['won', 'lost'].includes(a.stage) ? 1 : 0;
+        const bOverdue = b.nextFollowUpAt && Date.parse(b.nextFollowUpAt) <= now && !['won', 'lost'].includes(b.stage) ? 1 : 0;
+        if (aOverdue !== bOverdue) return bOverdue - aOverdue;
+        const scoreDiff = Number(b.priorityScore ?? -1) - Number(a.priorityScore ?? -1);
+        if (scoreDiff) return scoreDiff;
+        const aDue = a.nextFollowUpAt ? Date.parse(a.nextFollowUpAt) : Number.POSITIVE_INFINITY;
+        const bDue = b.nextFollowUpAt ? Date.parse(b.nextFollowUpAt) : Number.POSITIVE_INFINITY;
+        if (aDue !== bDue) return aDue - bDue;
+        return Date.parse(b.updatedAt ?? 0) - Date.parse(a.updatedAt ?? 0);
+      });
     body.innerHTML = filtered.length ? filtered.map((item) => `
       <article class="row" style="display:block; padding:14px 0;">
         <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">
