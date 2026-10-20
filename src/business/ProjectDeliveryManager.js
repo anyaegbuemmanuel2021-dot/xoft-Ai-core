@@ -63,7 +63,7 @@ function invoiceFor(project) {
     'This is a draft invoice. It has not been sent and payment has not been received.',
     'Record a verifiable invoice/sending reference before marking it as sent.',
     'Prepared by Softly Digitals',
-  ].join('\\n');
+  ].join('\n');
 }
 
 function proposalFor(project) {
