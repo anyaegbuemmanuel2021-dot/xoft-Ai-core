@@ -6,13 +6,13 @@ const BRAVE_BASE_URL = 'https://api.search.brave.com/res/v1/web/search';
 function lightpandaEndpoint() {
   if (config.browser.token) {
     const region = config.browser.cloudRegion === 'uswest' ? 'uswest' : 'euwest';
-    return `wss://${region}.cloud.lightpanda.io/ws?token=${encodeURIComponent(config.browser.token)}&browser=lightpanda`;
+    return \`wss://\${region}.cloud.lightpanda.io/ws?token=\${encodeURIComponent(config.browser.token)}&browser=lightpanda\`;
   }
   const raw = String(config.browser.cdpUrl || 'ws://127.0.0.1:9222').trim();
   if (raw.startsWith('ws://') || raw.startsWith('wss://')) return raw;
   if (raw.startsWith('http://') || raw.startsWith('https://')) {
     const u = new URL(raw);
-    return `ws${u.protocol === 'https:' ? 's' : ''}://${u.host}`;
+    return \`ws\${u.protocol === 'https:' ? 's' : ''}://\${u.host}\`;
   }
   throw new Error('Lightpanda: LIGHTPANDA_CDP_URL must be a ws://, wss://, http:// or https:// URL.');
 }
@@ -29,7 +29,7 @@ export class SearchService {
 
   async withBrowser(work) {
     if (config.browser.provider !== 'lightpanda') {
-      throw new Error(`Unsupported BROWSER_PROVIDER "${config.browser.provider}". Currently supported: lightpanda.`);
+      throw new Error(\`Unsupported BROWSER_PROVIDER "\${config.browser.provider}". Currently supported: lightpanda.\`);
     }
     let browser;
     try {
@@ -48,7 +48,7 @@ export class SearchService {
       const hint = config.browser.token
         ? 'Check LPD_TOKEN, LIGHTPANDA_CLOUD_REGION, and your Lightpanda cloud access.'
         : 'Start Lightpanda CDP on LIGHTPANDA_CDP_URL or set LPD_TOKEN for Lightpanda Cloud.';
-      throw new Error(`Lightpanda browser unavailable: ${err.message}. ${hint}`);
+      throw new Error(\`Lightpanda browser unavailable: \${err.message}. \${hint}\`);
     } finally {
       if (browser) await browser.disconnect().catch(() => {});
     }
@@ -57,20 +57,20 @@ export class SearchService {
   /** @param {string} query @param {number} count */
   async search(query, count = 5) {
     if (config.search.braveApiKey) {
-      const res = await fetch(`${BRAVE_BASE_URL}?q=${encodeURIComponent(query)}&count=${Math.min(10, Math.max(1, count))}`, {
+      const res = await fetch(\`\${BRAVE_BASE_URL}?q=\${encodeURIComponent(query)}&count=\${Math.min(10, Math.max(1, count))}\`, {
         headers: { Accept: 'application/json', 'X-Subscription-Token': config.search.braveApiKey },
         signal: AbortSignal.timeout(config.browser.timeoutMs),
       });
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`SearchService: Brave API error ${res.status} - ${errText.slice(0, 500)}`);
+        throw new Error(\`SearchService: Brave API error \${res.status} - \${errText.slice(0, 500)}\`);
       }
       const data = await res.json();
       return (data.web?.results ?? []).map((r) => ({ title: r.title, url: r.url, description: r.description }));
     }
 
     return this.withBrowser(async (page) => {
-      const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      const url = \`https://html.duckduckgo.com/html/?q=\${encodeURIComponent(query)}\`;
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       return page.evaluate((limit) => Array.from(document.querySelectorAll('.result'))
         .map((node) => {
@@ -87,7 +87,7 @@ export class SearchService {
     });
   }
 
-  /** Reads rendered page text through Lightpanda, falling back to basic HTTP fetch only if browser use fails. */
+  /** Reads rendered page text through Lightpanda, falling back to basic HTTP fetch if the browser is unavailable. */
   async fetchPage(url) {
     let parsed;
     try { parsed = new URL(url); } catch { throw new Error('SearchService: url must be a valid absolute URL.'); }
@@ -96,29 +96,27 @@ export class SearchService {
     try {
       const text = await this.withBrowser(async (page) => {
         await page.goto(parsed.href, { waitUntil: 'domcontentloaded' });
-        return page.evaluate(() => (document.body?.innerText || document.documentElement?.innerText || '').replace(/\\s+/g, ' ').trim());
+        return page.evaluate(() => (document.body?.innerText || document.documentElement?.innerText || '').replace(/\s+/g, ' ').trim());
       });
       return text.slice(0, 12000);
     } catch (browserError) {
-      // Graceful fallback keeps basic public-page retrieval working if Lightpanda
-      // is temporarily unavailable; this does not claim browser automation worked.
       try {
         const res = await fetch(parsed.href, {
           headers: { 'User-Agent': 'XOFT-WebFetcher/1.0' },
           signal: AbortSignal.timeout(config.browser.timeoutMs),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error(\`HTTP \${res.status}\`);
         const html = await res.text();
         return html
-          .replace(/<script[\\s\\S]*?<\\/script>/gi, '')
-          .replace(/<style[\\s\\S]*?<\\/style>/gi, '')
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
           .replace(/<[^>]+>/g, ' ')
           .replace(/&nbsp;/gi, ' ')
           .replace(/&amp;/gi, '&')
-          .replace(/\\s+/g, ' ')
+          .replace(/\s+/g, ' ')
           .trim().slice(0, 12000);
       } catch (fallbackError) {
-        throw new Error(`SearchService: Lightpanda and HTTP page retrieval both failed. Browser: ${browserError.message}. Fetch: ${fallbackError.message}`);
+        throw new Error(\`SearchService: Lightpanda and HTTP page retrieval both failed. Browser: \${browserError.message}. Fetch: \${fallbackError.message}\`);
       }
     }
   }
