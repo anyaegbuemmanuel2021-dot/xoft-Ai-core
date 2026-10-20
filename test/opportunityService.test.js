@@ -41,6 +41,16 @@ test('deduplicates by source URL and by company/title', () => {
   } finally { f.cleanup(); }
 });
 
+test('rejects empty titles and duplicate updates', () => {
+  const f = fixture();
+  try {
+    const first = f.store.create({ title: 'Website project', company: 'Example Ltd', sourceUrl: 'https://example.com/one' });
+    f.store.create({ title: 'Brand identity', company: 'Another Ltd', sourceUrl: 'https://example.com/two' });
+    assert.throws(() => f.store.update(first.id, { title: '   ' }), /title cannot be empty/);
+    assert.throws(() => f.store.update(first.id, { sourceUrl: 'https://example.com/two' }), (err) => err.code === 'OPPORTUNITY_DUPLICATE');
+  } finally { f.cleanup(); }
+});
+
 test('updates stage history, filters list and reports follow-ups due', () => {
   const f = fixture();
   try {
