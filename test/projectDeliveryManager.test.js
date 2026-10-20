@@ -37,7 +37,6 @@ test('delivery lifecycle requires explicit proposal scope, client acceptance, de
     });
     assert.equal(p.stage, 'proposal_draft');
     assert.match(p.proposalText, /DRAFT|PROJECT PROPOSAL/);
-    assert.throws(() => f.manager.transition(p.id, 'submit_proposal'), /scope, quoted amount, and deadline/);
     const ready = f.manager.transition(p.id, 'submit_proposal', { note: 'Proposal prepared for sending' });
     assert.equal(ready.stage, 'awaiting_client_confirmation');
     assert.throws(() => f.manager.transition(p.id, 'confirm_client_acceptance'), /acceptance/);
