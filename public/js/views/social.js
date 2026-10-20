@@ -118,6 +118,40 @@ export async function render(container) {
   const selectedPlatforms = () => [...container.querySelectorAll('input[name="social-platform"]:checked')].map((el) => el.value);
   const selectedTargetAccounts = () => [...container.querySelectorAll('input[name="social-account"]:checked')].map((el) => ACCOUNT_PROFILES.find((account) => account.profileId === el.value)).filter((account) => account && selectedPlatforms().includes(account.platform));
   const setFeedback = (message) => { $('social-feedback').textContent = message; };
+  let socialHandles = [];
+  let editingHandleId = null;
+  const setHandleFeedback = (message) => { $('social-handle-feedback').textContent = message; };
+  const resetHandleForm = () => {
+    editingHandleId = null;
+    $('social-handle-add').textContent = '＋ Add social handle';
+    ['social-handle-name','social-handle-display','social-handle-read-tool','social-handle-publish-tool','social-handle-context'].forEach((id) => { $(id).value = ''; });
+    $('social-handle-goals').value = 'Build trust and attract relevant customers';
+    $('social-handle-tone').value = 'Professional, helpful and clear';
+    $('social-handle-interval').value = '24';
+  };
+  const renderHandleList = () => {
+    $('social-handle-list').innerHTML = socialHandles.length ? socialHandles.map((item) => {
+      let style = 'Not learned yet';
+      try { if (item.styleProfile) { const profile = JSON.parse(item.styleProfile); style = safe(profile.summary || profile.voice || 'Style profile saved'); } } catch { style = safe(item.styleProfile.slice(0, 180)); }
+      return `<article class="social-post social-handle-card">
+        <div class="social-post-head"><div><strong>${safe(item.displayName || item.handle)}</strong><div class="plugin-results">${safe(item.platform)} · ${safe(item.handle)} · ${item.learnedExamples || 0} examples learned</div></div><span class="plugin-category">${item.autoEnabled ? 'AUTOPILOT ON' : 'AUTOPILOT OFF'}</span></div>
+        <p><strong>Style:</strong> ${style}</p>
+        <p class="plugin-results">Next run: ${safe(localTime(item.nextRunAt))} · Last scan: ${safe(localTime(item.lastScanAt))}</p>
+        ${item.lastError ? `<p class="social-error">Last issue: ${safe(item.lastError)}</p>` : ''}
+        <div class="social-actions">
+          <button type="button" data-handle-action="edit" data-handle-id="${safe(item.id)}">Edit settings</button>
+          <button type="button" data-handle-action="learn" data-handle-id="${safe(item.id)}">Learn from posts</button>
+          <button type="button" data-handle-action="run" data-handle-id="${safe(item.id)}" ${item.autoEnabled ? '' : 'disabled'}>Run now</button>
+          <button type="button" data-handle-action="autonomy" data-handle-id="${safe(item.id)}">${item.autoEnabled ? 'Pause autonomy' : 'Enable autonomy'}</button>
+          <button type="button" class="danger" data-handle-action="kill" data-handle-id="${safe(item.id)}">⛔ KILL THIS HANDLE</button>
+        </div>
+      </article>`;
+    }).join('') : '<div class="empty">No handles added yet. Add your first handle above. You can register multiple profiles on the same or different platforms.</div>';
+  };
+  const refreshHandles = async () => {
+    socialHandles = await api.get('/api/social/handles');
+    renderHandleList();
+  };
   const refresh = async () => {
     [summary, posts] = await Promise.all([api.get('/api/social/summary'), api.get('/api/social/posts')]);
     $('social-drafts').textContent = summary.drafts;
