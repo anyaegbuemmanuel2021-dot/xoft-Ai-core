@@ -72,3 +72,20 @@ test('autopilot validates interval and batch bounds', () => {
     assert.throws(() => f.autopilot.update({ maxMissionsPerCycle: 6 }), /1 to 5/);
   } finally { f.cleanup(); }
 });
+
+test('autopilot report flags overdue and soon-due active missions', async () => {
+  const f = fixture();
+  try {
+    f.autopilot.missionScheduler.manager = {
+      list: () => [
+        { id: 'late', goal: 'Overdue deliverable', status: 'planned', deadline: '2026-10-20T11:00:00.000Z' },
+        { id: 'soon', goal: 'Due soon', status: 'created', deadline: '2026-10-21T11:00:00.000Z' },
+        { id: 'done', goal: 'Completed already', status: 'completed', deadline: '2026-10-20T10:00:00.000Z' },
+      ],
+    };
+    f.autopilot.update({ enabled: true });
+    const result = await f.autopilot.tick();
+    assert.deepEqual(result.deadlineWarnings.map((item) => item.id), ['late', 'soon']);
+    assert.ok(result.deadlineWarnings[0].msRemaining < 0);
+  } finally { f.cleanup(); }
+});
