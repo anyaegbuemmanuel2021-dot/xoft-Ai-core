@@ -22,7 +22,7 @@ export function scoreOpportunity({ title = '', description = '', query = '', url
   }
   let host = '';
   try { host = new URL(url).hostname.toLowerCase(); } catch {}
-  if (host && /(^|\.)(linkedin|facebook|instagram|tiktok|reddit|x)\.com$/.test(host)) {
+  if (host && host.split('.').some((label) => ['linkedin', 'facebook', 'instagram', 'tiktok', 'reddit', 'x'].includes(label))) {
     signals.push({ name: 'social_or_profile_source_needs_manual_review', impact: 0 });
   }
   score = Math.max(0, Math.min(100, score));
