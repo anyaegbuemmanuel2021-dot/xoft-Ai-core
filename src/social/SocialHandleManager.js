@@ -120,7 +120,7 @@ export class SocialHandleManager {
   cancelQueuedForHandle(id) {
     let cancelled = 0;
     for (const post of this.socialMediaScheduler.list({ status: 'scheduled', limit: 500 })) {
-      if ((post.targetAccounts ?? []).some((account) => account.profileId === id)) {
+      if ((post.targetAccounts ?? []).some((account) => account.handleId === id || account.profileId === id)) {
         try { if (this.socialMediaScheduler.cancel(post.id)) cancelled += 1; } catch { /* leave terminal or in-flight posts untouched */ }
       }
     }
@@ -182,7 +182,7 @@ export class SocialHandleManager {
       if (!manual && !beforeQueue?.autoEnabled) return { stopped: true, reason: 'Per-handle kill switch was activated before the post was queued.' };
       const post = this.socialMediaScheduler.create({
         title: safeText(draft.title || content.slice(0, 80), 180), content, platforms: [latest.platform],
-        targetAccounts: [{ platform: latest.platform, profileId: latest.id, name: latest.displayName, handle: latest.handle }],
+        targetAccounts: [{ platform: latest.platform, profileId: latest.handle, handleId: latest.id, name: latest.displayName, handle: latest.handle }],
         hashtags: Array.isArray(draft.hashtags) ? draft.hashtags.slice(0, 20) : [],
       });
       // Explicit opt-in to per-account autonomy is the approval for this narrowly scoped workflow.
