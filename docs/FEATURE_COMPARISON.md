@@ -84,6 +84,12 @@ Status key:
 | 58 | Per-domain autonomy (files/browser/devices/communication/social/finance/memory) | LIVE | — | `src/autonomy/DomainAutonomy.js` |
 | 59 | Live checks of WhatsApp/Twilio/AI-provider reachability (real API calls, not just isConfigured()) | READY | WhatsApp/Twilio credentials for those two; AI providers already covered by #1 | `WhatsAppService.checkLive()`, `TwilioService.checkLive()`, `GET /api/integrations/live-check` |
 
+| 60 | Opportunity pipeline (persistent lead tracking + public search discovery) | PARTIAL — code and dashboard added; full CI/live search not yet verified | reachable `search_web` integration for discovery | `src/business/OpportunityStore.js`, `POST /api/opportunities/discover`, `public/js/views/opportunities.js` |
+
+## Opportunity pipeline verification note
+
+XOFT now has a durable opportunity tracker with stages, source URLs, evidence snippets, estimated (not confirmed) value, follow-up dates, duplicate detection, stage history, and dashboard editing. The discovery action uses the existing public web research tool and saves results as **unqualified research leads**. It does not claim a search result is a verified client, send outreach automatically, or guarantee revenue. CI and live search connectivity must be checked before this row can be promoted to READY.
+
 ## Why some rows say NOT BUILT instead of "coming later"
 
 These aren't unfinished — they're the wrong tool for a Node backend, on any
