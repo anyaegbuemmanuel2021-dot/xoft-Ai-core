@@ -610,10 +610,10 @@ app.post('/api/social/generate-content', requireAdmin, async (req, res) => {
   }
 });
 app.get('/api/social/summary', (_req, res) => res.json(socialMediaScheduler.summary()));
-app.get('/api/social/posts', (req, res) => res.json(socialMediaScheduler.list({ status: req.query.status, platform: req.query.platform })));
+app.get('/api/social/posts', (req, res) => res.json(socialMediaScheduler.list({ status: req.query.status, platform: req.query.platform }).map(socialPostView)));
 app.post('/api/social/posts', requireAdmin, (req, res) => {
   if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot create or schedule public social posts.' });
-  try { return res.status(201).json(socialMediaScheduler.create(req.body ?? {})); }
+  try { return res.status(201).json(socialPostView(socialMediaScheduler.create(req.body ?? {}))); }
   catch (err) { return res.status(400).json({ error: err.message }); }
 });
 app.patch('/api/social/posts/:id', requireAdmin, (req, res) => {
@@ -621,7 +621,7 @@ app.patch('/api/social/posts/:id', requireAdmin, (req, res) => {
   try {
     const post = socialMediaScheduler.update(req.params.id, req.body ?? {});
     if (!post) return res.status(404).json({ error: 'Social post not found' });
-    return res.json(post);
+    return res.json(socialPostView(post));
   } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 app.post('/api/social/posts/:id/schedule', requireAdmin, (req, res) => {
@@ -629,7 +629,7 @@ app.post('/api/social/posts/:id/schedule', requireAdmin, (req, res) => {
   try {
     const post = socialMediaScheduler.schedule(req.params.id, req.body ?? {});
     if (!post) return res.status(404).json({ error: 'Social post not found' });
-    return res.json({ post, note: 'Scheduled and explicitly approved. Publication will only occur while XOFT is running and the selected connector can publish.' });
+    return res.json({ post: socialPostView(post), note: 'Scheduled and explicitly approved. Publication will only occur while XOFT is running and the selected connector can publish.' });
   } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 app.post('/api/social/posts/:id/cancel', requireAdmin, (req, res) => {
@@ -637,7 +637,7 @@ app.post('/api/social/posts/:id/cancel', requireAdmin, (req, res) => {
   try {
     const post = socialMediaScheduler.cancel(req.params.id);
     if (!post) return res.status(404).json({ error: 'Social post not found' });
-    return res.json(post);
+    return res.json(socialPostView(post));
   } catch (err) { return res.status(400).json({ error: err.message }); }
 });
 app.post('/api/social/posts/:id/publish-now', requireAdmin, async (req, res) => {
@@ -647,9 +647,9 @@ app.post('/api/social/posts/:id/publish-now', requireAdmin, async (req, res) => 
     if (!post) return res.status(404).json({ error: 'Social post not found' });
     if (post.status === 'draft' || post.status === 'failed') {
       const scheduled = socialMediaScheduler.schedule(post.id, { ...req.body, scheduledAt: new Date(Date.now() + 1000).toISOString() });
-      return res.json(await socialMediaScheduler.publish(scheduled.id));
+      return res.json(socialPostView(await socialMediaScheduler.publish(scheduled.id)));
     }
-    return res.json(await socialMediaScheduler.publish(post.id));
+    return res.json(socialPostView(await socialMediaScheduler.publish(post.id)));
   } catch (err) { return res.status(502).json({ error: err.message, note: 'Check connector status before retrying; external providers can have accepted a request even if the response failed.' }); }
 });
 
@@ -746,6 +746,15 @@ app.patch('/api/opportunities/:id', (req, res) => {
 });
 
 const deliveryProjectView = (project) => { if (!project) return project; const { workspacePath, ...safe } = project; return safe; };
+const socialPostView = (post) => {
+  if (!post) return post;
+  const { publishInput, providerResult, ...safe } = post;
+  const providerSummary = providerResult && typeof providerResult === 'object'
+    ? Object.fromEntries(['id', 'postId', 'url', 'status', 'published'].filter((key) => providerResult[key] !== undefined).map((key) => [key, providerResult[key]]))
+    : null;
+  return { ...safe, providerResult: providerSummary };
+};
+
 // --- Project delivery lifecycle: opportunity -> proposal -> acceptance -> delivery -> invoice -> verified payment ---
 app.get('/api/delivery/summary', (_req, res) => res.json(projectDeliveryManager.summary()));
 app.get('/api/delivery/projects', (req, res) => res.json(projectDeliveryManager.list({ stage: req.query.stage, q: req.query.q }).map(deliveryProjectView)));
