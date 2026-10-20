@@ -1,4 +1,5 @@
 import { JsonStore } from '../persistence/JsonStore.js';
+import { scoreOpportunity } from '../business/OpportunityScorer.js';
 
 export const DEFAULT_SCOUT_QUERIES = Object.freeze([
   'freelance website development jobs remote Nigeria',
