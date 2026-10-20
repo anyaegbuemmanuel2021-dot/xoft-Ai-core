@@ -39,7 +39,7 @@ export class ExecutiveBrain {
    * @param {import('../advisor/AdvisorAgent.js').AdvisorAgent} [deps.advisorAgent]
    * @param {import('../intelligence/IntelligenceDirector.js').IntelligenceDirector} [deps.intelligenceDirector]
    */
-  constructor({ router, memory, orchestrator, taskPlanner, approvalSystem, worldState, activityLog, confidenceEngine, personality, advisorAgent, intelligenceDirector, address }) {
+  constructor({ router, memory, orchestrator, taskPlanner, approvalSystem, worldState, activityLog, eventBus = null, confidenceEngine, personality, advisorAgent, intelligenceDirector, address }) {
     this.address = address ?? null;
     this.router = router;
     this.memory = memory;
@@ -48,6 +48,7 @@ export class ExecutiveBrain {
     this.approvalSystem = approvalSystem;
     this.worldState = worldState;
     this.activityLog = activityLog;
+    this.eventBus = eventBus;
     this.confidenceEngine = confidenceEngine ?? null;
     this.personality = personality ?? null;
     this.advisorAgent = advisorAgent ?? null;
@@ -123,6 +124,29 @@ export class ExecutiveBrain {
     return { action: 'world_state', reply: result.text, meta: { worldState: this.worldState.snapshot() } };
   }
 
+  // Publish a concise, user-visible preflight briefing before any planned task starts.
+  // This is observability, not permission: risky steps still use the existing approval flow.
+  _publishPreflightBriefing(task, preview, sessionId) {
+    const briefing = {
+      taskId: task.id,
+      sessionId,
+      goal: task.goal,
+      status: preview.requiresApproval ? 'awaiting_confirmation' : 'starting',
+      requiresApproval: Boolean(preview.requiresApproval),
+      maxRiskName: preview.maxRiskName ?? 'SAFE',
+      steps: (task.steps ?? []).map((step, index) => ({
+        order: index + 1,
+        description: String(step.description ?? step.toolName ?? 'Task step').slice(0, 240),
+        tool: String(step.toolName ?? 'unknown').slice(0, 100),
+        risk: step.riskName ?? step.riskLevel ?? 'unclassified',
+      })),
+      at: new Date().toISOString(),
+    };
+    this.activityLog?.log({ type: 'executive_preflight_briefing', detail: briefing });
+    this.eventBus?.emitEvent('executive.preflight_briefing', briefing);
+    return briefing;
+  }
+
   // PLAN + CONFIDENCE + RISK ASSESSMENT
   async _handleGoal(sessionId, message) {
     this.memory.addTurn(sessionId, 'user', message);
@@ -168,10 +192,12 @@ export class ExecutiveBrain {
     }
 
     const preview = this.taskPlanner.previewPlan(task.id);
+    const briefing = this._publishPreflightBriefing(task, preview, sessionId);
 
     if (!preview.requiresApproval) {
       // PERMISSION check is implicit (all steps SAFE/LOW) — EXECUTE immediately.
       const executed = await this.taskPlanner.execute(task.id);
+      this.activityLog?.log({ type: 'executive_preflight_outcome', detail: { taskId: task.id, status: executed.status } });
       await this.intelligenceDirector?.learn(message, executed);
       return this._verifyAndRespond(sessionId, executed);
     }
@@ -180,7 +206,7 @@ export class ExecutiveBrain {
     this._pendingPlans.set(sessionId, { taskId: task.id, goal: message });
     const reply = `Here's the plan:\n${preview.text}\n\nThis includes at least one ${preview.maxRiskName}-risk step, so I'll wait for you to confirm before running it. Say "do it" to proceed.`;
     this.memory.addTurn(sessionId, 'assistant', reply);
-    return { action: 'goal', reply, meta: { task, preview, intelligence, awaitingConfirmation: true } };
+    return { action: 'goal', reply, meta: { task, preview, intelligence, briefing, awaitingConfirmation: true } };
   }
 
   async _handleConfirm(sessionId) {
@@ -191,6 +217,8 @@ export class ExecutiveBrain {
     }
     this._pendingPlans.delete(sessionId);
 
+    this.activityLog?.log({ type: 'executive_preflight_confirmed', detail: { taskId: pending.taskId, sessionId } });
+    this.eventBus?.emitEvent('executive.preflight_confirmed', { taskId: pending.taskId, sessionId, at: new Date().toISOString() });
     let executed = await this.taskPlanner.execute(pending.taskId);
 
     // The plan-preview + "do it" exchange the user just went through IS their
@@ -206,6 +234,7 @@ export class ExecutiveBrain {
       guard += 1;
     }
 
+    this.activityLog?.log({ type: 'executive_preflight_outcome', detail: { taskId: pending.taskId, status: executed.status } });
     await this.intelligenceDirector?.learn(pending.goal, executed);
     return this._verifyAndRespond(sessionId, executed);
   }
