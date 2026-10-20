@@ -48,7 +48,7 @@ export class SocialEngagementManager {
     const platform = required(String(input.platform ?? ''), 'platform', 40).toLowerCase();
     const externalId = required(String(input.externalId ?? ''), 'externalId', 300);
     const message = required(String(input.message ?? ''), 'message', 10000);
-    const existing = this._data().items.find((item) => item.platform === platform && item.channel === channel && item.externalId === externalId);
+    const existing = this._data().items.find((item) => item.platform === platform && item.channel === channel && item.externalId === externalId && (item.sourceConnectorId ?? '') === String(input.connectorId ?? ''));
     const now = this.now().toISOString();
     if (existing) {
       const next = { ...existing, message, senderName: String(input.senderName ?? existing.senderName ?? '').slice(0, 180), postUrl: String(input.postUrl ?? existing.postUrl ?? '').slice(0, 2048), conversationId: String(input.conversationId ?? existing.conversationId ?? '').slice(0, 300), receivedAt: input.receivedAt ? new Date(input.receivedAt).toISOString() : existing.receivedAt, updatedAt: now };
@@ -56,7 +56,7 @@ export class SocialEngagementManager {
       return { item: next, duplicate: true };
     }
     const item = {
-      id: crypto.randomUUID(), externalId, channel, platform, message,
+      id: crypto.randomUUID(), externalId, channel, platform, message, sourceConnectorId: String(input.connectorId ?? '').slice(0, 100) || null,
       senderName: String(input.senderName ?? '').slice(0, 180),
       postUrl: String(input.postUrl ?? '').slice(0, 2048),
       conversationId: String(input.conversationId ?? '').slice(0, 300),
@@ -96,7 +96,7 @@ export class SocialEngagementManager {
         const message = record.message ?? record.text ?? record.body ?? record.content;
         if (!externalId || typeof message !== 'string' || !message.trim()) continue;
         const result = this.ingest({
-          channel: operation.channel, platform: plan.platform, externalId: String(externalId),
+          channel: operation.channel, platform: plan.platform, connectorId: plan.connectorId, externalId: String(externalId),
           message, senderName: String(record.senderName ?? record.authorName ?? record.fromName ?? ''),
           postUrl: String(record.postUrl ?? record.url ?? ''), conversationId: String(record.conversationId ?? record.threadId ?? ''),
           receivedAt: record.createdAt ?? record.timestamp,
