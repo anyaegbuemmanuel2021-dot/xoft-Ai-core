@@ -86,6 +86,7 @@ import { KillSwitch } from './security/KillSwitch.js';
 import { ProactiveEngine } from './proactive/ProactiveEngine.js';
 import { MissionManager } from './missions/MissionManager.js';
 import { OpportunityStore } from './business/OpportunityStore.js';
+import { scoreOpportunity } from './business/OpportunityScorer.js';
 import { BriefingScheduler } from './proactive/BriefingScheduler.js';
 import { OpportunityScout } from './proactive/OpportunityScout.js';
 import { RecoveryEngine } from './recovery/RecoveryEngine.js';
