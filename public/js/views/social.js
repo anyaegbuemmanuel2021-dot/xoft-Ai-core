@@ -259,6 +259,120 @@ export async function render(container) {
   });
 
 
+  $('social-handle-discover').addEventListener('click', async () => {
+    const connectorId = $('social-handle-connector').value;
+    if (!connectorId) return setHandleFeedback('Choose a configured connector first.');
+    $('social-handle-discover').disabled = true;
+    setHandleFeedback('Discovering connector tools…');
+    try {
+      const discovered = await api.get('/api/connectors/' + encodeURIComponent(connectorId) + '/tools');
+      const tools = Array.isArray(discovered?.tools) ? discovered.tools : Array.isArray(discovered?.result?.tools) ? discovered.result.tools : [];
+      const names = tools.map((tool) => typeof tool === 'string' ? tool : tool.name).filter(Boolean);
+      $('social-tool-options').innerHTML = names.map((name) => '<option value="' + safe(name) + '">').join('');
+      const choose = (patterns) => names.find((name) => patterns.some((pattern) => pattern.test(name))) ?? '';
+      if (!$('social-handle-read-tool').value) $('social-handle-read-tool').value = choose([/(?:list|read|fetch|get|search).*(post|content|feed|timeline)/i, /(post|content|feed|timeline).*(list|read|fetch|get)/i]);
+      if (!$('social-handle-publish-tool').value) $('social-handle-publish-tool').value = choose([/(publish|create|schedule|send).*(post|content)/i, /(post|content).*(publish|create|send)/i]);
+      setHandleFeedback(names.length ? 'Found ' + names.length + ' tool(s). Confirm that the chosen reader returns recent posts for this exact account and the publisher sends to the correct handle.' : 'No tools returned by this connector.');
+    } catch (error) { setHandleFeedback('Tool discovery failed: ' + error.message); }
+    finally { $('social-handle-discover').disabled = false; }
+  });
+  $('social-handle-add').addEventListener('click', async () => {
+    const handle = $('social-handle-name').value.trim();
+    if (!handle) return setHandleFeedback('Enter the social handle or profile URL first.');
+    const payload = {
+      platform: $('social-handle-platform').value, handle,
+      displayName: $('social-handle-display').value.trim() || handle,
+      connectorId: $('social-handle-connector').value,
+      readTool: $('social-handle-read-tool').value.trim(),
+      publishTool: $('social-handle-publish-tool').value.trim(),
+      goals: $('social-handle-goals').value.trim(),
+      tone: $('social-handle-tone').value.trim(),
+      intervalHours: Number($('social-handle-interval').value) || 24,
+      brandContext: $('social-handle-context').value.trim(),
+    };
+    $('social-handle-add').disabled = true;
+    try {
+      if (editingHandleId) {
+        await api.patch('/api/social/handles/' + encodeURIComponent(editingHandleId), payload);
+        setHandleFeedback('Handle settings saved. Autonomy state was not changed.');
+      } else {
+        await api.post('/api/social/handles', payload);
+        setHandleFeedback('Handle added. Autonomy is OFF until you configure the tools and explicitly enable it.');
+      }
+      resetHandleForm();
+      await refreshHandles();
+      toast(editingHandleId ? 'Social handle updated' : 'Social handle added');
+    } catch (error) { setHandleFeedback('Could not save handle: ' + error.message); }
+    finally { $('social-handle-add').disabled = false; }
+  });
+  $('social-handle-refresh').addEventListener('click', () => refreshHandles().catch((error) => setHandleFeedback('Could not refresh handles: ' + error.message)));
+  $('social-handle-list').addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-handle-action]');
+    if (!button) return;
+    const id = button.dataset.handleId;
+    const action = button.dataset.handleAction;
+    const item = socialHandles.find((entry) => entry.id === id);
+    if (!item) return;
+    if (action === 'edit') {
+      editingHandleId = id;
+      $('social-handle-add').textContent = 'Save handle settings';
+      $('social-handle-platform').value = item.platform;
+      $('social-handle-name').value = item.handle;
+      $('social-handle-display').value = item.displayName || '';
+      $('social-handle-connector').value = item.connectorId || '';
+      $('social-handle-read-tool').value = item.readTool || '';
+      $('social-handle-publish-tool').value = item.publishTool || '';
+      $('social-handle-goals').value = item.goals || '';
+      $('social-handle-tone').value = item.tone || '';
+      $('social-handle-interval').value = item.intervalHours || 24;
+      $('social-handle-context').value = item.brandContext || '';
+      $('social-handle-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHandleFeedback('Editing ' + item.platform + ' ' + item.handle + '. Save changes below.');
+      return;
+    }
+    if (action === 'kill') {
+      if (!window.confirm('KILL AUTOPILOT FOR ' + item.handle + '? This disables future runs and cancels scheduled posts still queued for this handle. A post already accepted by the platform cannot be recalled.')) return;
+      button.disabled = true;
+      try {
+        const result = await api.post('/api/social/handles/' + encodeURIComponent(id) + '/kill', { reason: 'Owner used per-handle KILL button' });
+        await refreshHandles();
+        setHandleFeedback('KILL SWITCH ACTIVE for ' + item.handle + '. ' + (result.cancelledScheduledPosts || 0) + ' queued post(s) cancelled. Check the platform for any already accepted post.');
+        toast('Handle autopilot stopped');
+      } catch (error) { setHandleFeedback('Kill request failed: ' + error.message); }
+      finally { button.disabled = false; }
+      return;
+    }
+    if (action === 'autonomy') {
+      if (item.autoEnabled) {
+        try {
+          await api.post('/api/social/handles/' + encodeURIComponent(id) + '/autonomy', { enabled: false });
+          await refreshHandles();
+          setHandleFeedback('Autonomy paused for ' + item.handle + '. Use the KILL button for emergency stop and queue cancellation.');
+        } catch (error) { setHandleFeedback('Could not pause autonomy: ' + error.message); }
+        return;
+      }
+      const owner = $('social-handle-owner').value.trim();
+      if (!owner) { setHandleFeedback('Enter your name in OWNER CONFIRMATION NAME before enabling unsupervised posting.'); $('social-handle-owner').focus(); return; }
+      if (!window.confirm('Enable UNSUPERVISED posting for ' + item.handle + '? XOFT will learn from the configured reader and publish original posts on the configured cadence without per-post approval. The handle has its own KILL button.')) return;
+      try {
+        await api.post('/api/social/handles/' + encodeURIComponent(id) + '/autonomy', { enabled: true, confirmedBy: owner });
+        await refreshHandles();
+        setHandleFeedback('Autonomy enabled for ' + item.handle + '. XOFT will begin learning and queue a post when the next run succeeds.');
+      } catch (error) { setHandleFeedback('Could not enable autonomy: ' + error.message); }
+      return;
+    }
+    if (action === 'learn' || action === 'run') {
+      button.disabled = true;
+      setHandleFeedback(action === 'learn' ? 'Reading recent posts and learning the account style…' : 'Running autonomous content cycle…');
+      try {
+        const result = await api.post('/api/social/handles/' + encodeURIComponent(id) + (action === 'learn' ? '/learn' : '/run'), {});
+        await refreshHandles();
+        if (action === 'learn') setHandleFeedback('XOFT analyzed ' + result.examplesRead + ' post example(s) for ' + item.handle + '. Review the saved style profile in the handle card.');
+        else setHandleFeedback(result.note || 'Autonomous cycle finished. Check the post queue and connector result.');
+      } catch (error) { setHandleFeedback((action === 'learn' ? 'Learning failed: ' : 'Autonomous run failed: ') + error.message); await refreshHandles().catch(() => {}); }
+      finally { button.disabled = false; }
+    }
+  });
   const engagementFeedback = (message) => { $('social-engagement-feedback').textContent = message; };
   const renderEngagement = () => {
     const current = $('social-engagement-select').value;
