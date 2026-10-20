@@ -13,7 +13,7 @@ async function bootServer(env, port) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-auth-test-'));
   const child = spawn(process.execPath, [path.join(ROOT, 'src', 'index.js')], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), MEMORY_DATA_DIR: dataDir, ...env },
+    env: { ...process.env, PORT: String(port), MEMORY_DATA_DIR: dataDir, ...env, STORAGE_MODE: env.STORAGE_MODE ?? 'json' },
     stdio: 'pipe',
   });
   let stderr = '';
