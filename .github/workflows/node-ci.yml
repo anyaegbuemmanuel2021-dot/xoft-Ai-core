@@ -1,0 +1,51 @@
+name: XOFT Core CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xoft-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Node.js tests and syntax checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run test suite
+        run: npm test
+
+      - name: Check server entry point syntax
+        run: node --check src/index.js
+
+      - name: Check recently added business and proactive modules
+        run: |
+          node --check src/business/ProjectDeliveryManager.js
+          node --check src/business/OpportunityFollowUpPlanner.js
+          node --check src/business/OpportunityStore.js
+          node --check src/proactive/OpportunityScout.js
+          node --check src/proactive/BriefingScheduler.js
+          node --check src/skills/SkillCatalog.js
+          node --check public/js/views/delivery.js
+          node --check public/js/views/opportunities.js
+          node --check public/js/views/settings.js
+          node --check public/js/app.js
