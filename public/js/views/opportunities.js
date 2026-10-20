@@ -40,6 +40,12 @@ export async function render(container) {
         <button id="opp-discover" class="primary">Search and save leads</button>
         <div id="opp-discover-result" class="muted" aria-live="polite"></div>
       `)}
+      ${card('Follow-up drafts', `
+        <p class="muted">XOFT can prepare follow-up messages for overdue leads. These are drafts only; they are not sent automatically.</p>
+        <button id="opp-followup-generate" class="primary">Prepare due follow-ups</button>
+        <div id="opp-followup-status" class="muted" aria-live="polite"></div>
+        <div id="opp-followup-drafts"></div>
+      `, { span2: true })}
       ${card('Add opportunity', `
         <div class="form-row"><label for="opp-title">Opportunity / project *</label><input id="opp-title" maxlength="180" placeholder="Business website project" required /></div>
         <div class="form-row"><label for="opp-company">Company</label><input id="opp-company" maxlength="180" placeholder="Company or client" /></div>
@@ -96,6 +102,40 @@ export async function render(container) {
     } finally {
       button.disabled = false;
       button.textContent = 'Run research now';
+    }
+  });
+
+  const followUpStatus = container.querySelector('#opp-followup-status');
+  const followUpList = container.querySelector('#opp-followup-drafts');
+  const renderFollowUpDrafts = (drafts = []) => {
+    followUpList.innerHTML = drafts.length ? drafts.map((draft) => `
+      <article class="row" style="display:block;padding:12px 0;">
+        <strong>${esc(draft.subject)}</strong>
+        <div class="muted">${esc(draft.company || draft.opportunityTitle)} · Due ${esc(fmtTime(draft.dueAt))}</div>
+        <pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(draft.message)}</pre>
+        <div class="muted">${esc(draft.note)}</div>
+      </article>
+    `).join('') : '<div class="empty">No follow-up drafts yet. Add a due follow-up time to a lead, then prepare drafts.</div>';
+  };
+  try {
+    renderFollowUpDrafts(await api.get('/api/opportunities/follow-up-drafts'));
+  } catch {
+    followUpStatus.textContent = 'Follow-up drafts could not be loaded. Check connection and API permissions.';
+  }
+  onDelegate(container, 'click', '#opp-followup-generate', async () => {
+    const button = container.querySelector('#opp-followup-generate');
+    button.disabled = true;
+    button.textContent = 'Preparing drafts…';
+    followUpStatus.textContent = '';
+    try {
+      const result = await guarded(() => api.post('/api/opportunities/follow-up-drafts/generate', {}), 'Prepare follow-up drafts');
+      if (result && !result.__queued) {
+        followUpStatus.textContent = `Created ${result.created ?? 0} new drafts; ${result.dueCount ?? 0} follow-ups are due.`;
+        renderFollowUpDrafts(await api.get('/api/opportunities/follow-up-drafts'));
+      }
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Prepare due follow-ups';
     }
   });
 
