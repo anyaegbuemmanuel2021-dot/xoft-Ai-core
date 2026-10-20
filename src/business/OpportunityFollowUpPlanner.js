@@ -5,12 +5,12 @@ const CLOSED_STAGES = new Set(['won', 'lost']);
 
 function makeDraft(opportunity) {
   const contact = opportunity.contactName ? ` ${opportunity.contactName}` : '';
-  const company = opportunity.company ? ` at ${opportunity.company}` : '';
+  const company = opportunity.company ? ` for ${opportunity.company}` : '';
   const service = opportunity.service || 'the project we discussed';
   return [
     `Hello${contact},`,
     '',
-    `I’m following up regarding ${service}${company ? ` for${company}` : ''}. I’d be happy to clarify the scope, timeline, and deliverables and share a suitable proposal.`,
+    `I’m following up regarding ${service}${company ? company : ''}. I’d be happy to clarify the scope, timeline, and deliverables and share a suitable proposal.`,
     '',
     'If this is still relevant, please let me know the requirements, deadline, and budget range so I can recommend the right next step.',
     '',
