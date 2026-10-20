@@ -1,3 +1,10 @@
+    if (typeof this.connectorManager.discover === 'function') {
+      const discovery = await this.connectorManager.discover(connector);
+      const tools = Array.isArray(discovery?.tools) ? discovery.tools : [];
+      if (!tools.some((entry) => (typeof entry === 'string' ? entry : entry?.name) === tool)) {
+        throw new Error('Selected reply tool was not found in the connector’s discovered tool list');
+      }
+    }
 import crypto from 'node:crypto';
 import { JsonStore } from '../persistence/JsonStore.js';
 
