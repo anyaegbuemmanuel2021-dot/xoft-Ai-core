@@ -127,6 +127,7 @@ export class SocialEngagementManager {
     const connector = required(String(connectorId ?? ''), 'connectorId', 100);
     const tool = required(String(replyTool ?? ''), 'replyTool', 120);
     this.connectorManager.get(connector);
+    if (item.sourceConnectorId && connector !== item.sourceConnectorId) throw new Error('Replies must use the same connector/account that imported this inbox item');
     const response = await this.connectorManager.call(connector, {
       tool,
       input: {
@@ -143,6 +144,8 @@ export class SocialEngagementManager {
     if (provider?.success === false || provider?.sent === false || provider?.error || provider?.messageId === null) {
       throw new Error(String(provider.error ?? provider.message ?? 'Connector did not confirm reply submission'));
     }
+    const explicitlyAccepted = provider?.success === true || Boolean(provider?.messageId || provider?.replyId || provider?.id) || ['accepted', 'sent', 'ok'].includes(String(provider?.status ?? '').toLowerCase());
+    if (!explicitlyAccepted) throw new Error('Connector did not return explicit reply acceptance evidence; the inbox item remains open.');
     const providerId = provider?.messageId ?? provider?.id ?? provider?.replyId ?? null;
     const next = {
       ...item, replyDraft: text, status: 'replied', replySentAt: this.now().toISOString(),
