@@ -21,7 +21,7 @@ function fixture() {
 test('social calendar persists drafts and only publishes approved scheduled posts', async () => {
   const f = fixture();
   try {
-    const draft = f.scheduler.create({ title: 'Launch post', content: 'We help small businesses build better websites.', platforms: ['facebook', 'instagram'], hashtags: ['BusinessGrowth'] });
+    const draft = f.scheduler.create({ title: 'Launch post', content: 'We help small businesses build better websites.', platforms: ['facebook', 'instagram'], targetAccounts: [{ profileId: 'facebook:softly-bot', platform: 'facebook', name: 'Softly Bot', handle: 'Softly Bot' }, { profileId: 'instagram:softly1810', platform: 'instagram', name: 'Softly Digitals', handle: '@softly1810' }], hashtags: ['BusinessGrowth'] });
     assert.equal(draft.status, 'draft');
     await assert.rejects(() => f.scheduler.publish(draft.id), /Only approved scheduled posts/);
     const scheduled = f.scheduler.schedule(draft.id, {
@@ -39,6 +39,7 @@ test('social calendar persists drafts and only publishes approved scheduled post
     assert.equal(published.status, 'published');
     assert.equal(published.providerResult.postId, 'provider-123');
     assert.equal(f.calls.length, 1);
+    assert.deepEqual(f.calls[0].input.post.targetAccounts.map((account) => account.profileId), ['facebook:softly-bot', 'instagram:softly1810']);
     assert.equal(f.scheduler.summary().published, 1);
   } finally { f.cleanup(); }
 });
