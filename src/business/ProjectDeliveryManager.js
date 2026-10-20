@@ -45,6 +45,27 @@ function normalizePatch(input) {
   if (out.currency && !/^[A-Z]{3}$/.test(out.currency)) throw new Error('currency must be a 3-letter ISO currency code');
   return out;
 }
+function invoiceFor(project) {
+  const amount = new Intl.NumberFormat('en-NG', { style: 'currency', currency: project.currency || DEFAULT_CURRENCY, maximumFractionDigits: 2 }).format(project.quotedAmount ?? 0);
+  return [
+    'INVOICE — SOFTLY DIGITALS',
+    '',
+    'Invoice reference: DRAFT-' + project.id.slice(0, 8).toUpperCase(),
+    'Client: ' + (project.clientName || project.company || 'Client to be confirmed'),
+    'Project: ' + project.title,
+    'Description: ' + (project.scope || project.service || 'As agreed'),
+    'Deliverables: ' + ((project.deliverables ?? []).join('; ') || 'As agreed in writing'),
+    'Amount due: ' + amount,
+    'Currency: ' + (project.currency || DEFAULT_CURRENCY),
+    'Payment terms: As agreed in the accepted proposal.',
+    'Due date: To be confirmed with the client.',
+    '',
+    'This is a draft invoice. It has not been sent and payment has not been received.',
+    'Record a verifiable invoice/sending reference before marking it as sent.',
+    'Prepared by Softly Digitals',
+  ].join('\\n');
+}
+
 function proposalFor(project) {
   const amount = project.quotedAmount == null ? 'To be agreed' : new Intl.NumberFormat('en-NG', { style: 'currency', currency: project.currency || DEFAULT_CURRENCY, maximumFractionDigits: 2 }).format(project.quotedAmount);
   const deliverables = (project.deliverables ?? []).length ? project.deliverables.map((x) => '- ' + x).join('\n') : '- Deliverables to be confirmed with the client';
@@ -109,7 +130,7 @@ export class ProjectDeliveryManager {
       clientEmail: opportunity.contactEmail || '', scope: opportunity.fitRationale || opportunity.service || '',
       deadline: patch.deadline ?? null, quotedAmount: patch.quotedAmount ?? null, currency: patch.currency || DEFAULT_CURRENCY,
       deliverables: patch.deliverables ?? [], notes: patch.notes || '',
-      stage: 'proposal_draft', proposalText: '', missionId: null, acceptanceEvidence: '', deliveryEvidence: '',
+      stage: 'proposal_draft', proposalText: '', invoiceText: '', missionId: null, acceptanceEvidence: '', deliveryEvidence: '', previousStage: null,
       invoiceReference: '', paymentReference: '', createdAt: ts, updatedAt: ts, history: [],
     };
     project.proposalText = proposalFor(project);
@@ -167,6 +188,7 @@ export class ProjectDeliveryManager {
     } else if (action === 'create_invoice') {
       if (p.stage !== 'delivered') throw new Error('Only a delivered project can be invoiced');
       if (p.quotedAmount == null) throw new Error('Quoted amount is required before invoicing');
+      next.invoiceText = invoiceFor(p);
       next.stage = 'invoice_draft';
     } else if (action === 'mark_invoice_sent') {
       if (p.stage !== 'invoice_draft') throw new Error('Create an invoice draft first');
@@ -181,10 +203,12 @@ export class ProjectDeliveryManager {
       next.stage = 'paid';
     } else if (action === 'block') {
       if (!note) throw new Error('Explain what is blocking delivery');
+      next.previousStage = p.stage;
       next.stage = 'blocked';
     } else if (action === 'unblock') {
       if (p.stage !== 'blocked') throw new Error('Project is not blocked');
-      next.stage = p.missionId ? 'in_progress' : 'accepted';
+      next.stage = STAGES.includes(p.previousStage) && p.previousStage !== 'blocked' ? p.previousStage : (p.missionId ? 'in_progress' : 'accepted');
+      next.previousStage = null;
     } else if (action === 'cancel') {
       next.stage = 'cancelled';
     } else {
