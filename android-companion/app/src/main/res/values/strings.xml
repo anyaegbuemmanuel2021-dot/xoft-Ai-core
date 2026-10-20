@@ -1,1 +1,1 @@
-<resources><string name="app_name">XOFT Companion</string></resources>
+<resources><string name="app_name">XOFT Companion</string><string name="accessibility_service_description">Allows XOFT to perform explicitly authorized screen actions.</string></resources>
