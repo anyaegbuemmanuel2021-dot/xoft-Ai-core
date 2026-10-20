@@ -318,6 +318,17 @@ const proactiveEngine = new ProactiveEngine({ worldState, eventBus, activityLog,
 proactiveEngine.start();
 
 const app = express();
+// Apply security headers before registering any routes, including public webhooks.
+app.use(helmet());
+// Public provider webhooks bypass /api authentication by design, so give them
+// their own IP-based abuse limit. Set TRUST_PROXY correctly behind a proxy.
+const webhookLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: Math.max(1, Number(process.env.WEBHOOK_RATE_LIMIT_PER_MIN) || 120),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Webhook rate limit exceeded; retry later.' },
+});
 // Behind a reverse proxy set TRUST_PROXY=1 (hop count) so rate limits and logs see the real client IP. Off by default. See docs/SETUP_AND_HOSTING.md.
 const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
 if (trustProxy !== undefined) app.set('trust proxy', trustProxy);
@@ -328,7 +339,7 @@ app.use((req, res, next) => {
 });
 app.get('/healthz', (_req, res) => res.status(200).json({ ok: true, service: 'xoft-core' }));
 app.get('/readyz', (_req, res) => res.status(200).json({ ok: true, service: 'xoft-core', storage: config.storage.mode, connectors: connectorManager.list().filter((c) => c.enabled).map((c) => c.id) }));
-app.get('/webhooks/whatsapp', (req, res) => {
+app.get('/webhooks/whatsapp', webhookLimit, (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
@@ -336,7 +347,7 @@ app.get('/webhooks/whatsapp', (req, res) => {
   return res.sendStatus(403);
 });
 
-app.post('/webhooks/whatsapp', express.raw({ type: 'application/json', limit: '2mb' }), async (req, res) => {
+app.post('/webhooks/whatsapp', webhookLimit, express.raw({ type: 'application/json', limit: '2mb' }), async (req, res) => {
   const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}));
   if (!whatsappService.verifySignature(raw, req.get('x-hub-signature-256'))) return res.sendStatus(403);
   try {
@@ -370,12 +381,12 @@ app.post('/webhooks/whatsapp', express.raw({ type: 'application/json', limit: '2
   }
 });
 
-app.post('/webhooks/twilio/voice', express.urlencoded({ extended: false }), (req, res) => {
+app.post('/webhooks/twilio/voice', webhookLimit, express.urlencoded({ extended: false, limit: '64kb' }), (req, res) => {
   if (!twilioService.validateSignature(config.twilio.voiceWebhookUrl, req.body, req.get('x-twilio-signature'))) return res.sendStatus(403);
   res.type('text/xml').send(twilioService.buildVoicePrompt());
 });
 
-app.post('/webhooks/twilio/voice/respond', express.urlencoded({ extended: false }), async (req, res) => {
+app.post('/webhooks/twilio/voice/respond', webhookLimit, express.urlencoded({ extended: false, limit: '64kb' }), async (req, res) => {
   const expectedUrl = config.twilio.voiceResponseUrl;
   if (!twilioService.validateSignature(expectedUrl, req.body, req.get('x-twilio-signature'))) return res.sendStatus(403);
   const speech = String(req.body?.SpeechResult ?? '').trim();
@@ -390,16 +401,15 @@ app.post('/webhooks/twilio/voice/respond', express.urlencoded({ extended: false 
   }
 });
 
-app.post('/webhooks/twilio/status', express.urlencoded({ extended: false }), (req, res) => {
-  if (config.twilio.publicBaseUrl && !twilioService.validateSignature(`${config.twilio.publicBaseUrl}/webhooks/twilio/status`, req.body, req.get('x-twilio-signature'))) return res.sendStatus(403);
+app.post('/webhooks/twilio/status', webhookLimit, express.urlencoded({ extended: false, limit: '64kb' }), (req, res) => {
+  // Fail closed: without the configured canonical public URL, signature validation cannot be trusted.
+  if (!config.twilio.publicBaseUrl || !twilioService.validateSignature(`${config.twilio.publicBaseUrl}/webhooks/twilio/status`, req.body, req.get('x-twilio-signature'))) return res.sendStatus(403);
   activityLog.log({ type: 'twilio_call_status', detail: { callSid: req.body?.CallSid, status: req.body?.CallStatus, from: req.body?.From, to: req.body?.To } });
   res.sendStatus(204);
 });
 
-// Real hardening: security headers + rate limiting on every API route, not
-// just a config flag that says "secure" — see SecurityAgent for the audit
-// that verifies these are actually active.
-app.use(helmet());
+// Real hardening: rate limiting on every API route, not just a config flag
+// that says "secure" — see SecurityAgent for the audit that verifies this.
 app.use('/api', rateLimit({
   windowMs: 60 * 1000,
   limit: Number(process.env.RATE_LIMIT_PER_MIN) || 120, // generous for normal use, still a real ceiling against abuse
