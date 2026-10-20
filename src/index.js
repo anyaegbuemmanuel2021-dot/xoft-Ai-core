@@ -1,5 +1,6 @@
 import express from 'express';
 import crypto from 'node:crypto';
+import { matchesConfiguredSecret } from './security/ApiKeyAuth.js';
 import { fileURLToPath } from 'node:url';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -434,7 +435,7 @@ if (config.auth.apiKeys.length > 0 || (config.nodeEnv === 'production' && config
     const header = req.get('authorization');
     const bearer = header?.startsWith('Bearer ') ? header.slice(7) : null;
     const provided = bearer ?? req.get('x-api-key');
-    if (provided && config.auth.apiKeys.includes(provided)) return next();
+    if (provided && matchesConfiguredSecret(provided, config.auth.apiKeys)) return next();
     // Per-device token (spec section 10): proves "I am device X", not "I am
     // the admin" — so it only gets past this gate, never treated as
     // equivalent to the shared key. The per-route check below still
