@@ -49,12 +49,12 @@ export async function render(container) {
         <div class="form-row"><label for="social-post-select">SAVED DRAFT</label><select id="social-post-select"><option value="">Save a draft first</option></select></div>
         <div class="form-row"><label for="social-date">PUBLISH AT (YOUR DEVICE TIME)</label><input id="social-date" type="datetime-local" /></div>
         <div class="form-row"><label for="social-connector">PUBLISHING CONNECTOR</label><select id="social-connector"><option value="">Choose connector</option>${summary.connectors.map((c) => `<option value="${safe(c.id)}">${safe(c.name)} (${safe(c.id)})</option>`).join('')}</select></div>
-        <div class="form-row"><label for="social-tool">PUBLISH TOOL NAME</label><input id="social-tool" maxlength="120" placeholder="Use the exact tool name from connector discovery" /></div>
+        <div class="form-row"><label for="social-tool">PUBLISH TOOL NAME</label><input id="social-tool" list="social-tool-options" maxlength="120" placeholder="Discover tools, then choose the publish tool" /><datalist id="social-tool-options"></datalist></div>
         <div class="form-row"><label for="social-approver">APPROVED BY</label><input id="social-approver" maxlength="120" placeholder="Your name" /></div>
         <div class="form-row"><label for="social-approval-note">APPROVAL NOTE</label><input id="social-approval-note" maxlength="1000" placeholder="I reviewed this copy and authorize publishing" /></div>
       </div>
       <div class="form-row"><label for="social-payload">CONNECTOR EXTRA INPUT (JSON, optional)</label><textarea id="social-payload" rows="2" placeholder="{}"></textarea></div>
-      <div class="social-actions"><button type="button" id="social-schedule" class="primary">Approve & schedule</button><button type="button" id="social-refresh">Refresh calendar</button></div>
+      <div class="social-actions"><button type="button" id="social-discover">Discover connector tools</button><button type="button" id="social-schedule" class="primary">Approve & schedule</button><button type="button" id="social-refresh">Refresh calendar</button></div><p id="social-connector-info" class="plugin-safety-note" aria-live="polite">Choose a configured connector to inspect its available publishing tools.</p>
       <p class="plugin-safety-note">Connect a publishing service through Plugins & Apps → server connector configuration. XOFT does not have native direct posting credentials for every social network. Scheduled publishing requires the server to stay online and the connector's tool to accept the post payload.</p>
     </section>
     <section class="card"><div class="plugin-section-head"><div><span class="plugin-kicker">CONTENT CALENDAR</span><h2>Post queue</h2></div><select id="social-filter"><option value="">All posts</option><option value="draft">Drafts</option><option value="scheduled">Scheduled</option><option value="published">Published</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option></select></div><div id="social-list" class="social-list"><div class="empty">Loading calendar…</div></div></section>
@@ -108,6 +108,25 @@ export async function render(container) {
       await refresh(); $('social-post-select').value = post.id;
       toast('Social post draft saved');
     } catch (error) { setFeedback('Could not save draft: ' + error.message); }
+  });
+  $('social-discover').addEventListener('click', async () => {
+    const connectorId = $('social-connector').value;
+    if (!connectorId) return ($('social-connector-info').textContent = 'Choose a configured connector first.');
+    $('social-discover').disabled = true;
+    $('social-connector-info').textContent = 'Discovering connector tools…';
+    try {
+      const discovered = await api.get('/api/connectors/' + encodeURIComponent(connectorId) + '/tools');
+      const tools = Array.isArray(discovered?.tools) ? discovered.tools : Array.isArray(discovered?.result?.tools) ? discovered.result.tools : [];
+      $('social-tool-options').innerHTML = tools.map((tool) => {
+        const name = typeof tool === 'string' ? tool : tool.name;
+        return name ? '<option value="' + safe(name) + '">' : '';
+      }).join('');
+      $('social-connector-info').textContent = tools.length
+        ? 'Found ' + tools.length + ' tool(s). Select the tool that actually publishes posts; not every connector tool is a publisher.'
+        : 'Connector response received. Review tool names: ' + JSON.stringify(discovered).slice(0, 1000);
+    } catch (error) {
+      $('social-connector-info').textContent = 'Tool discovery failed: ' + error.message;
+    } finally { $('social-discover').disabled = false; }
   });
   $('social-schedule').addEventListener('click', async () => {
     const id = $('social-post-select').value;
