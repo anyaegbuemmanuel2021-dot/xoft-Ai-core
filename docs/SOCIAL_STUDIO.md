@@ -105,7 +105,7 @@ The Social Studio now includes a per-handle control room backed by `src/social/S
 3. Choose a reader that actually returns recent post text for the selected account and a publisher that posts to that exact account. Tool-name suggestions are only hints; verify their input/output contracts.
 4. Add confirmed brand facts and restrictions. XOFT must not invent prices, testimonials, discounts, performance claims, or promises.
 5. Use **Learn from posts** to fetch recent examples and generate a stored style profile. If the connector returns no readable examples, learning fails rather than fabricating a profile.
-6. Enter the owner confirmation name and enable autonomy for that handle only after verifying the tools and account permissions.
+6. XOFT validates that the exact reader and publisher tool names exist in the selected connector. Enter the owner confirmation name and enable autonomy for that handle only after verifying the tools and account permissions.
 
 ### What autonomy does
 
@@ -117,7 +117,7 @@ The Social Studio now includes a per-handle control room backed by `src/social/S
 
 ### Per-handle KILL switch
 
-The red **KILL THIS HANDLE** button sets `autoEnabled=false`, clears the next run time, records the stop event, and cancels scheduled queue items targeted to that handle. It does not stop other handles. It cannot retract a post that the external platform has already accepted, and an in-flight request may require checking the provider before retrying. Use the server's global emergency stop for a system-wide halt.
+The red **KILL THIS HANDLE** button sets `autoEnabled=false`, clears the next run time, records the stop event, and cancels scheduled queue items targeted to that handle. The UI refuses to report success for an offline/queued kill request; the server must confirm the stop. It does not stop other handles. It cannot retract a post that the external platform has already accepted, and an in-flight request may require checking the provider before retrying. Use the server's global emergency stop for a system-wide halt.
 
 ### API
 
