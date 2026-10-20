@@ -105,7 +105,9 @@ export class MissionAutopilot {
         emergencyStopActive: emergency,
         considered: ranking.ranked.length + ranking.skipped.length,
         selected: selected.length,
+        selectedMissions: selected.map((mission) => ({ id: mission.id, goal: mission.goal, score: mission.score, reasons: mission.reasons })),
         skipped: ranking.skipped.length,
+        skippedMissions: ranking.skipped.slice(0, 20),
         results,
         durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
       };
