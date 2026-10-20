@@ -103,10 +103,15 @@ export async function render(container) {
       const content = $('social-content').value.trim();
       if (!content) return setFeedback('Write or generate the post copy first.');
       const hashtags = $('social-hashtags').value.split(',').map((x) => x.trim()).filter(Boolean);
-      const post = await api.post('/api/social/posts', { title: $('social-brief').value.trim(), content, platforms: selectedPlatforms(), hashtags });
-      setFeedback('Draft saved. Choose it below to schedule after review.');
+      const payload = { title: $('social-brief').value.trim(), content, platforms: selectedPlatforms(), hashtags };
+      const selectedId = $('social-post-select').value;
+      const editable = posts.find((item) => item.id === selectedId && ['draft', 'failed'].includes(item.status));
+      const post = editable
+        ? await api.patch('/api/social/posts/' + encodeURIComponent(editable.id), payload)
+        : await api.post('/api/social/posts', payload);
+      setFeedback(editable ? 'Selected draft updated.' : 'Draft saved. Choose it below to schedule after review.');
       await refresh(); $('social-post-select').value = post.id;
-      toast('Social post draft saved');
+      toast(editable ? 'Social post draft updated' : 'Social post draft saved');
     } catch (error) { setFeedback('Could not save draft: ' + error.message); }
   });
   $('social-discover').addEventListener('click', async () => {
