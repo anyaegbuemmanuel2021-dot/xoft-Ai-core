@@ -1,10 +1,3 @@
-    if (typeof this.connectorManager.discover === 'function') {
-      const discovery = await this.connectorManager.discover(connector);
-      const tools = Array.isArray(discovery?.tools) ? discovery.tools : [];
-      if (!tools.some((entry) => (typeof entry === 'string' ? entry : entry?.name) === tool)) {
-        throw new Error('Selected reply tool was not found in the connector’s discovered tool list');
-      }
-    }
 import crypto from 'node:crypto';
 import { JsonStore } from '../persistence/JsonStore.js';
 
@@ -134,6 +127,13 @@ export class SocialEngagementManager {
     const connector = required(String(connectorId ?? ''), 'connectorId', 100);
     const tool = required(String(replyTool ?? ''), 'replyTool', 120);
     this.connectorManager.get(connector);
+    if (typeof this.connectorManager.discover === 'function') {
+      const discovery = await this.connectorManager.discover(connector);
+      const tools = Array.isArray(discovery?.tools) ? discovery.tools : [];
+      if (!tools.some((entry) => (typeof entry === 'string' ? entry : entry?.name) === tool)) {
+        throw new Error('Selected reply tool was not found in the connector’s discovered tool list');
+      }
+    }
     if (item.sourceConnectorId && connector !== item.sourceConnectorId) throw new Error('Replies must use the same connector/account that imported this inbox item');
     const response = await this.connectorManager.call(connector, {
       tool,
