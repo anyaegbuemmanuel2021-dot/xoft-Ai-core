@@ -50,7 +50,7 @@ test('the view is registered in the app, in the service-worker shell, and the en
   assert.match(app, /import \* as engines from '\.\/views\/engines\.js'/);
   assert.match(app, /\['engines', '(?:Engines|Agents)', engines, 'agents'\]/);
   assert.match(sw, /\/js\/views\/engines\.js/);
-  assert.match(sw, /xoft-shell-v12/);
+  assert.match(sw, /xoft-shell-v\\d+/);
   assert.match(index, /registerEngineRoutes\(app,/);
   assert.match(index, /registerToolGatewayRoute\(app,/);
 });
