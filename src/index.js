@@ -85,6 +85,7 @@ import { SpecialistDirector } from './agents/specialists/SpecialistDirector.js';
 import { KillSwitch } from './security/KillSwitch.js';
 import { ProactiveEngine } from './proactive/ProactiveEngine.js';
 import { MissionManager } from './missions/MissionManager.js';
+import { OpportunityStore } from './business/OpportunityStore.js';
 import { RecoveryEngine } from './recovery/RecoveryEngine.js';
 import { ContextEngine } from './context/ContextEngine.js';
 import { VisionInterpreter } from './vision/VisionInterpreter.js';
@@ -100,6 +101,7 @@ import { TwilioService } from './integrations/TwilioService.js';
 import { buildCommunicationTools } from './tools/builtins/communicationTools.js';
 
 const durableStore = config.storage.mode === 'sqlite' ? new SqliteStore(config.storage.sqlitePath) : null;
+const opportunityStore = new OpportunityStore({ dataDir: config.memory.dataDir, sqliteStore: durableStore });
 const modelHealth = new ModelHealthManager();
 const router = new ProviderRouter(modelHealth, { privacy: config.privacy.routing ? privacyClassifier : null });
 // Optional gateway settings saved from the Settings UI (data/provider-settings.json, owner-only). load() never throws: a missing or
@@ -449,6 +451,42 @@ app.get('/api/missions/:id/drift', (req, res) => {
     const task = m.taskId ? taskPlanner.get(m.taskId) : null;
     res.json({ missionId: m.id, ...(task ? assessTaskDrift(m.goal, task) : { steps: [], flagged: [], heuristic: true }) });
   } catch (err) { res.status(404).json({ error: err.message }); }
+});
+
+// --- Opportunity pipeline: durable lead and client tracking ---
+app.get('/api/opportunities/summary', (_req, res) => res.json(opportunityStore.summary()));
+app.get('/api/opportunities', (req, res) => {
+  const { stage, q, limit } = req.query;
+  res.json(opportunityStore.list({ stage, q, limit: limit ? Number(limit) : undefined }));
+});
+app.get('/api/opportunities/:id', (req, res) => {
+  const item = opportunityStore.get(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Opportunity not found' });
+  res.json(item);
+});
+app.post('/api/opportunities', (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot create business opportunities.' });
+  try {
+    const item = opportunityStore.create(req.body ?? {});
+    activityLog.log({ type: 'opportunity_created', detail: { id: item.id, stage: item.stage, sourceUrl: item.sourceUrl || null } });
+    eventBus.emitEvent('opportunity.created', { id: item.id, stage: item.stage });
+    return res.status(201).json(item);
+  } catch (err) {
+    if (err.code === 'OPPORTUNITY_DUPLICATE') return res.status(409).json({ error: err.message, duplicate: err.opportunity });
+    return res.status(400).json({ error: err.message });
+  }
+});
+app.patch('/api/opportunities/:id', (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot update business opportunities.' });
+  try {
+    const item = opportunityStore.update(req.params.id, req.body ?? {});
+    if (!item) return res.status(404).json({ error: 'Opportunity not found' });
+    activityLog.log({ type: 'opportunity_updated', detail: { id: item.id, stage: item.stage } });
+    eventBus.emitEvent('opportunity.updated', { id: item.id, stage: item.stage });
+    return res.json(item);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 });
 
 app.post('/api/missions', (req, res) => { const { goal, autonomyLevel, deadline, budget, priority } = req.body ?? {}; if (!goal) return res.status(400).json({ error: 'goal is required' }); res.json(missionManager.create(goal, { autonomyLevel, deadline, budget, priority })); });
