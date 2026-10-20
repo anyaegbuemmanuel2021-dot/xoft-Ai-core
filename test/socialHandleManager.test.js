@@ -59,7 +59,7 @@ test('per-handle kill switch disables future autonomy and cancels only that hand
     f.manager.update(handle.id, { connectorId: 'social', readTool: 'read_posts', publishTool: 'publish_post' });
     f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' });
     // Simulate the queued post being associated with this handle's generated id.
-    const ownPost = { id: 'queued-own', status: 'scheduled', targetAccounts: [{ profileId: handle.id }] };
+    const ownPost = { id: 'queued-own', status: 'scheduled', targetAccounts: [{ profileId: handle.handle, handleId: handle.id }] };
     const originalList = f.manager.socialMediaScheduler.list;
     f.manager.socialMediaScheduler.list = ({ status }) => [...originalList({ status }), ownPost].filter((post) => !status || post.status === status);
     const result = f.manager.kill(handle.id, 'operator test');
