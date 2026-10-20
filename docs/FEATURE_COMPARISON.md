@@ -89,6 +89,11 @@ Status key:
 | 59 | Live checks of WhatsApp/Twilio/AI-provider reachability (real API calls, not just isConfigured()) | READY | WhatsApp/Twilio credentials for those two; AI providers already covered by #1 | `WhatsAppService.checkLive()`, `TwilioService.checkLive()`, `GET /api/integrations/live-check` |
 
 | 60 | Opportunity pipeline (persistent lead tracking + public search discovery) | PARTIAL — code and dashboard added; full CI/live search not yet verified | reachable `search_web` integration for discovery | `src/business/OpportunityStore.js`, `POST /api/opportunities/discover`, `public/js/views/opportunities.js` |
+| 61 | Persistent mission autopilot (deadline/priority-ranked background execution) | PARTIAL — scheduler/API/dashboard/tests added; runtime and full CI not yet verified; opt-in and disabled by default | healthy AI provider, hosted process, and missions in `created` or `planned` state; existing approvals/permissions remain enforced | `src/scheduler/MissionAutopilot.js`, `public/js/views/missions.js` |
+
+## Mission autopilot verification note
+
+XOFT now has a persistent, opt-in background runner that ranks existing missions by priority and deadline urgency and can execute a bounded number per cycle. It delegates to MissionScheduler/MissionManager/TaskPlanner, so existing provider-health checks, permission checks, approvals, budgets, stuck detection and emergency stop still apply. It is disabled by default until explicitly enabled in Missions & Goals. The scheduler, API and dashboard are implemented, but production execution and the complete test suite have not yet been verified.
 
 ## Opportunity pipeline verification note
 
