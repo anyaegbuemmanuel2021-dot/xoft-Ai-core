@@ -73,6 +73,26 @@ test('incident triage can create and sandbox a bounded repair proposal but never
   } finally { f.cleanup(); }
 });
 
+test('concurrent triage requests for the same incident do not create duplicate attempts', async () => {
+  const f = fixture({ response: { diagnosis: 'Investigate the error.', recommendedActions: [], repair: null } });
+  let release;
+  let calls = 0;
+  const gate = new Promise((resolve) => { release = resolve; });
+  f.service.router.complete = async () => {
+    calls += 1;
+    await gate;
+    return { text: JSON.stringify({ diagnosis: 'Investigate the error.', recommendedActions: [], repair: null }) };
+  };
+  try {
+    const first = f.service.triage('incident-1');
+    await assert.rejects(() => f.service.triage('incident-1'), /already running/);
+    release();
+    await first;
+    assert.equal(calls, 1);
+    assert.equal(f.service.list({ incidentId: 'incident-1' }).length, 1);
+  } finally { release(); f.cleanup(); }
+});
+
 test('incident triage rejects any repair path that was not derived from the recorded stack', async () => {
   const f = fixture({ response: {
     diagnosis: 'A protected auth file should not be changed.',
