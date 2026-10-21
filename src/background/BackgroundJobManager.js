@@ -7,6 +7,15 @@ import { redactSensitive } from '../operations/IncidentManager.js';
 
 const MAX_JOB_RETRIES = 3;
 const BASE_BACKOFF_MS = 5_000;
+const DEFAULT_JOB_TIMEOUT_MS = 120_000;
+const MIN_JOB_TIMEOUT_MS = 100;
+const MAX_JOB_TIMEOUT_MS = 600_000;
+
+function normalizeBudget(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return DEFAULT_JOB_TIMEOUT_MS;
+  return Math.max(MIN_JOB_TIMEOUT_MS, Math.min(MAX_JOB_TIMEOUT_MS, Math.floor(number)));
+}
 
 /** Persistent scheduler for tools AND autonomous XOFT tasks. */
 export class BackgroundJobManager {
@@ -24,24 +33,24 @@ export class BackgroundJobManager {
   _save(data) { this._store.save(data); }
   _patch(jobId, mutator) { const data=this._load(); const job=data.jobs.find(j=>j.id===jobId); if(job) mutator(job); this._save(data); return job; }
 
-  scheduleOnce({ toolName, input, delayMs = 0, executeAt }) {
+  scheduleOnce({ toolName, input, delayMs = 0, executeAt, maxRunMs = DEFAULT_JOB_TIMEOUT_MS }) {
     if (!this.toolRegistry.has(toolName)) throw new Error(`BackgroundJobManager: no tool named '${toolName}'`);
-    return this._schedule({ toolName, input, kind:'once', runAt: executeAt ? new Date(executeAt).toISOString() : new Date(Date.now()+Math.max(0,delayMs)).toISOString() });
+    return this._schedule({ toolName, input, kind:'once', maxRunMs, runAt: executeAt ? new Date(executeAt).toISOString() : new Date(Date.now()+Math.max(0,delayMs)).toISOString() });
   }
-  scheduleRecurring({ toolName, input, intervalMs }) {
+  scheduleRecurring({ toolName, input, intervalMs, maxRunMs = DEFAULT_JOB_TIMEOUT_MS }) {
     if (!this.toolRegistry.has(toolName)) throw new Error(`BackgroundJobManager: no tool named '${toolName}'`);
-    return this._schedule({ toolName, input, kind:'recurring', intervalMs, runAt:new Date(Date.now()+intervalMs).toISOString() });
+    return this._schedule({ toolName, input, kind:'recurring', intervalMs, maxRunMs, runAt:new Date(Date.now()+intervalMs).toISOString() });
   }
   /** Create a task now and schedule its autonomous execution for later. */
-  async scheduleTask({ goal, executeAt, delayMs = 0, autonomyLevel }) {
+  async scheduleTask({ goal, executeAt, delayMs = 0, autonomyLevel, maxRunMs = DEFAULT_JOB_TIMEOUT_MS }) {
     if (!this.taskPlanner) throw new Error('Task scheduling is not configured');
     const task = await this.taskPlanner.plan(goal);
     const runAt = executeAt ? new Date(executeAt) : new Date(Date.now()+Math.max(0,delayMs));
     if (Number.isNaN(runAt.getTime())) throw new Error('Invalid executeAt date');
-    const job = this._schedule({ kind:'task', taskId:task.id, goal, runAt:runAt.toISOString() });
+    const job = this._schedule({ kind:'task', taskId:task.id, goal, maxRunMs, runAt:runAt.toISOString() });
     return { task, job };
   }
-  _schedule({ toolName=null,input={},kind,intervalMs=null,taskId=null,goal=null,runAt }) {
+  _schedule({ toolName=null,input={},kind,intervalMs=null,taskId=null,goal=null,runAt,maxRunMs=DEFAULT_JOB_TIMEOUT_MS }) {
     const job={id:crypto.randomUUID(),correlationId:crypto.randomUUID(),kind,toolName,input,intervalMs,taskId,goal,maxRunMs:normalizeBudget(maxRunMs),runAt,status:'scheduled',attempts:0,lastRunAt:null,lastResult:null,lastError:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     const data=this._load(); data.jobs.push(job); this._save(data); this.activityLog.log({type:'background_job_created',detail:{jobId:job.id,kind,toolName,taskId,runAt}}); this._arm(job); return job;
   }
