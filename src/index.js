@@ -80,6 +80,7 @@ import { MemoryRetentionManager } from './memory/MemoryRetentionManager.js';
 import { KnowledgeGraph } from './memory/KnowledgeGraph.js';
 import { BackgroundJobManager } from './background/BackgroundJobManager.js';
 import { IncidentManager } from './operations/IncidentManager.js';
+import { IncidentTriageService } from './operations/IncidentTriageService.js';
 import { WorkflowEngine } from './workflows/WorkflowEngine.js';
 import { AutonomyManager } from './autonomy/AutonomyManager.js';
 import { DomainAutonomy, DOMAINS, domainForTool } from './autonomy/DomainAutonomy.js';
@@ -2100,6 +2101,20 @@ app.get('/api/autonomy/policy', (_req, res) => {
 });
 
 const selfDev = new SelfDevelopmentEngine({ repoRoot: fileURLToPath(new URL('..', import.meta.url)), dataDir: config.memory.dataDir, activityLog, emergencyStop });
+const incidentTriageService = new IncidentTriageService({ incidentManager, selfDev, router, injectionGuard, activityLog, eventBus, dataDir: config.memory.dataDir, sqliteStore: durableStore });
+app.get('/api/incidents/:id/triage', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot access incident triage records.' });
+  res.json(incidentTriageService.list({ incidentId: req.params.id, limit: req.query.limit }));
+});
+app.post('/api/incidents/:id/triage', requireAdmin, expensiveLimit, async (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot start incident triage.' });
+  try {
+    const result = await incidentTriageService.triage(req.params.id, { correlationId: req.requestId });
+    return res.json(result);
+  } catch (err) {
+    return res.status(502).json({ error: incidentManager.redact(err?.message ?? err), correlationId: req.requestId });
+  }
+});
 app.get('/api/selfdev/proposals', requireAdmin, (_req, res) => res.json(selfDev.list()));
 app.post('/api/selfdev/proposals', requireAdmin, (req, res) => { try { res.json(selfDev.propose(req.body ?? {})); } catch (err) { res.status(400).json({ error: err.message }); } });
 app.get('/api/selfdev/proposals/:id', requireAdmin, (req, res) => { try { res.json(selfDev.get(req.params.id)); } catch (err) { res.status(404).json({ error: err.message }); } });
