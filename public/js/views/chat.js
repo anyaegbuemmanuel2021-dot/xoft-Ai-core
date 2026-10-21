@@ -15,6 +15,11 @@ let mode = 'chat'; // 'chat' | 'advise'
 let activeController = null;
 const history = [];
 
+// Navigation away from Chat must cancel the browser request so the server can abort upstream model work.
+export function cleanup() {
+  activeController?.abort();
+}
+
 export function render(container) {
   container.innerHTML = `
     <div class="tabs">
