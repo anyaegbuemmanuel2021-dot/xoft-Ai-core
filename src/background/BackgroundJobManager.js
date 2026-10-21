@@ -17,6 +17,14 @@ function normalizeBudget(value) {
   return Math.max(MIN_JOB_TIMEOUT_MS, Math.min(MAX_JOB_TIMEOUT_MS, Math.floor(number)));
 }
 
+function normalizeTaskBudget(value, ceiling) {
+  const cap = Number(ceiling);
+  const fallback = Number.isFinite(cap) && cap >= 1000 ? cap : DEFAULT_JOB_TIMEOUT_MS;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback;
+  return Math.max(1000, Math.min(fallback, Math.floor(number)));
+}
+
 /** Persistent scheduler for tools AND autonomous XOFT tasks. */
 export class BackgroundJobManager {
   constructor({ toolRegistry, taskPlanner, activityLog, eventBus, memory, incidentManager = null, dataDir = './data', sqliteStore = null }) {
@@ -42,16 +50,16 @@ export class BackgroundJobManager {
     return this._schedule({ toolName, input, kind:'recurring', intervalMs, maxRunMs, runAt:new Date(Date.now()+intervalMs).toISOString() });
   }
   /** Create a task now and schedule its autonomous execution for later. */
-  async scheduleTask({ goal, executeAt, delayMs = 0, autonomyLevel }) {
+  async scheduleTask({ goal, executeAt, delayMs = 0, autonomyLevel, maxRunMs = this.taskPlanner?.maxDurationMs ?? DEFAULT_JOB_TIMEOUT_MS }) {
     if (!this.taskPlanner) throw new Error('Task scheduling is not configured');
     const task = await this.taskPlanner.plan(goal);
     const runAt = executeAt ? new Date(executeAt) : new Date(Date.now()+Math.max(0,delayMs));
     if (Number.isNaN(runAt.getTime())) throw new Error('Invalid executeAt date');
-    const job = this._schedule({ kind:'task', taskId:task.id, goal, maxRunMs: this.taskPlanner.maxDurationMs ?? DEFAULT_JOB_TIMEOUT_MS, runAt:runAt.toISOString() });
+    const job = this._schedule({ kind:'task', taskId:task.id, goal, maxRunMs, runAt:runAt.toISOString() });
     return { task, job };
   }
   _schedule({ toolName=null,input={},kind,intervalMs=null,taskId=null,goal=null,runAt,maxRunMs=DEFAULT_JOB_TIMEOUT_MS }) {
-    const job={id:crypto.randomUUID(),correlationId:crypto.randomUUID(),kind,toolName,input,intervalMs,taskId,goal,maxRunMs:normalizeBudget(maxRunMs),runAt,status:'scheduled',attempts:0,lastRunAt:null,lastResult:null,lastError:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    const job={id:crypto.randomUUID(),correlationId:crypto.randomUUID(),kind,toolName,input,intervalMs,taskId,goal,maxRunMs:kind==='task'?normalizeTaskBudget(maxRunMs,this.taskPlanner?.maxDurationMs):normalizeBudget(maxRunMs),runAt,status:'scheduled',attempts:0,lastRunAt:null,lastResult:null,lastError:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     const data=this._load(); data.jobs.push(job); this._save(data); this.activityLog.log({type:'background_job_created',detail:{jobId:job.id,kind,toolName,taskId,runAt}}); this._arm(job); return job;
   }
   _arm(job) {
@@ -73,7 +81,7 @@ export class BackgroundJobManager {
       if(job.kind==='task') {
         // TaskPlanner already enforces its own bounded duration and per-step idempotency keys.
         if(!this.taskPlanner) throw new Error('Task planner unavailable');
-        result=await this.taskPlanner.execute(job.taskId);
+        result=await this.taskPlanner.execute(job.taskId, { maxDurationMs: job.maxRunMs });
       } else {
         const controller = new AbortController();
         const maxRunMs = normalizeBudget(job.maxRunMs);
@@ -119,13 +127,13 @@ export class BackgroundJobManager {
           source: timedOut ? 'background_job_timeout' : 'background_job',
           severity: timedOut || attempts > MAX_JOB_RETRIES ? 'error' : 'warning',
           correlationId: job.correlationId,
-          context: { jobId, kind: job.kind, toolName: job.toolName, taskId: job.taskId, attempt: attempts, maxRunMs: job.kind === 'task' ? this.taskPlanner?.maxDurationMs ?? null : job.maxRunMs, idempotencyKey: executionIdempotencyKey },
+          context: { jobId, kind: job.kind, toolName: job.toolName, taskId: job.taskId, attempt: attempts, maxRunMs: job.maxRunMs, idempotencyKey: executionIdempotencyKey },
         }) ?? null;
       } catch { /* a telemetry failure must not stop bounded retry handling */ }
       this.activityLog.log({type:timedOut?'background_job_timed_out':'background_job_failed',detail:{jobId,toolName:job.toolName,taskId:job.taskId,attempt:attempts,error:safeError,incidentId:incident?.id ?? null,correlationId:job.correlationId}});
       if (timedOut) {
         // A timeout leaves the external side-effect outcome uncertain. Do not retry blindly.
-        this._patch(jobId,j=>{j.status='timed_out';j.attempts=attempts;j.lastError=safeError;j.timeoutMs=job.kind === 'task' ? this.taskPlanner?.maxDurationMs ?? job.maxRunMs : job.maxRunMs;j.runAt=null;j.finishedAt=new Date().toISOString();j.updatedAt=j.finishedAt;});
+        this._patch(jobId,j=>{j.status='timed_out';j.attempts=attempts;j.lastError=safeError;j.timeoutMs=job.maxRunMs;j.runAt=null;j.finishedAt=new Date().toISOString();j.updatedAt=j.finishedAt;});
         this._clearTimer(jobId);
         this.eventBus?.emitEvent(EventType.TASK_FAILED,{jobId,toolName:job.toolName,taskId:job.taskId,error:safeError,reason:'timeout',incidentId:incident?.id ?? null,correlationId:job.correlationId});
       } else if(attempts<=MAX_JOB_RETRIES){
