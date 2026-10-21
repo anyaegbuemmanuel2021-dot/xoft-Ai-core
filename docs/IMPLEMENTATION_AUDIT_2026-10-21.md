@@ -48,7 +48,7 @@ CI is not a live deployment test and does not validate secret configuration or r
 6. **Restart:** schedule a harmless job, restart the host, confirm scheduled work resumes and interrupted work is surfaced rather than duplicated.
 7. **Rollback:** on a test project, demonstrate failed sandbox prevents apply and a critical canary failure restores the known-good version.
 8. **External channels:** test WhatsApp Business, voice, SMS, and social connectors only with supported accounts and credentials. Distinguish queued, accepted, delivered, failed, and unknown states.
-9. **Authorization:** verify admin routes reject device-scoped credentials, direct background jobs reject EXTERNAL/HIGH_IMPACT tools, and emergency stop prevents queued/running actions where cancellation is possible.
+9. **Authorization:** verify admin routes reject device-scoped credentials, direct background jobs reject EXTERNAL/HIGH_IMPACT tools, and emergency stop/cancel aborts queued/running work where cancellation is possible.
 10. **Owner authorization:** do not deploy or change DNS/production settings until the owner explicitly requests it.
 
 ## Highest-priority remaining work
