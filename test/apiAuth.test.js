@@ -108,7 +108,7 @@ describe('API authentication (real server, integration)', { concurrency: false }
       });
       assert.equal(authed.status, 200);
     } finally {
-      server.stop();
+      await server.stop();
     }
   });
 });
