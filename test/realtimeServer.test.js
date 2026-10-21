@@ -18,20 +18,23 @@ async function bootServer(env, port) {
     stdio: 'pipe',
   });
   let stderr = '';
+  let exitCode = null;
   child.stderr.on('data', (d) => { stderr += d.toString(); });
+  child.once('exit', (code) => { exitCode = code; });
 
-  const deadline = Date.now() + 8000;
+  // App startup initializes durable stores and optional engines; allow slower CI runners a fair window.
+  const deadline = Date.now() + 15000;
   const probeKey = (env.AUTH_API_KEYS ?? '').split(',')[0]?.trim();
   const headers = probeKey ? { Authorization: `Bearer ${probeKey}` } : {};
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && exitCode === null) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/status`, { headers });
       if (res.ok) return { child, stop: () => child.kill('SIGKILL') };
     } catch { /* not up yet */ }
     await new Promise((r) => setTimeout(r, 100));
   }
-  child.kill('SIGKILL');
-  throw new Error(`Server on port ${port} never became ready. stderr:\n${stderr}`);
+  if (exitCode === null) child.kill('SIGKILL');
+  throw new Error(`Server on port ${port} never became ready (exit code: ${exitCode ?? 'still running'}). stderr:\n${stderr}`);
 }
 
 function waitFor(ws, event, timeoutMs = 3000) {
