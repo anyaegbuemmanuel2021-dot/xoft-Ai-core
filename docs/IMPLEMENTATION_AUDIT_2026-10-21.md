@@ -53,7 +53,7 @@ CI is not a live deployment test and does not validate secret configuration or r
 
 ## Highest-priority remaining work
 
-- Add explicit per-job time/cost budgets and stronger idempotency for external side effects.
+- Add explicit per-job cost/usage budgets and stronger idempotency enforcement inside external connectors; tool-job time budgets are now implemented.
 - Expand restart/retry/emergency-stop/rollback integration tests.
 - Verify social, WhatsApp Business, voice/SMS, and provider integrations against real test credentials.
 - Complete the sandboxed coding-agent workflow with reviewable diffs, secret scanning, named approval, canary health checks, and rollback.
