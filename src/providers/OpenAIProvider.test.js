@@ -81,3 +81,41 @@ test('OpenAIProvider.stream forwards AbortSignal to fetch', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test('OpenAIProvider.stream rejects truncated SSE even when partial text was received', async () => {
+  const provider = new OpenAIProvider();
+  provider.isConfigured = () => true;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}\\n\\n',
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+  try {
+    const events = [];
+    await assert.rejects(async () => {
+      for await (const event of provider.stream({ messages: [] })) events.push(event);
+    }, /stream ended before a terminal marker/);
+    assert.deepEqual(events.map((event) => event.type), ['text']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('OpenAIProvider.stream accepts [DONE] as a terminal marker when finish_reason is omitted', async () => {
+  const provider = new OpenAIProvider();
+  provider.isConfigured = () => true;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    'data: {"choices":[{"delta":{"content":"complete"},"finish_reason":null}]}\\n\\ndata: [DONE]\\n\\n',
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+  try {
+    const events = [];
+    for await (const event of provider.stream({ messages: [] })) events.push(event);
+    assert.deepEqual(events.map((event) => event.type), ['text', 'done']);
+    assert.equal(events.at(-1).result.text, 'complete');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
