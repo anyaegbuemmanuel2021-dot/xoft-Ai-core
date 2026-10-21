@@ -75,6 +75,7 @@ test('incident records survive manager restart and resolving one starts a new in
 test('redaction covers bearer tokens, API key assignments, and query-string credentials', () => {
   const text = redactSensitive('Bearer abc.def token=abc123 api_key=secret123 https://x.test/?access_token=tokenValue');
   assert.ok(!text.includes('abc.def'));
+  assert.ok(!text.includes('abc123'));
   assert.ok(!text.includes('secret123'));
   assert.ok(!text.includes('tokenValue'));
   assert.match(text, /REDACTED/);
