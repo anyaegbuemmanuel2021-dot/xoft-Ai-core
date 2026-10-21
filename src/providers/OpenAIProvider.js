@@ -142,17 +142,19 @@ export class OpenAIProvider extends AIProvider {
       let payload;
       try { payload = JSON.parse(data); } catch { return; }
       const delta = payload.choices?.[0]?.delta?.content;
-      if (typeof delta === 'string' && delta.length) {
-        text += delta;
-        return { type: 'text', delta };
-      }
+      // Process terminal metadata before returning a text event. Some compatible
+      // gateways attach the final delta and finish_reason to the same SSE payload.
       if (payload.usage) {
         usage = {
           inputTokens: payload.usage.prompt_tokens ?? 0,
           outputTokens: payload.usage.completion_tokens ?? 0,
         };
       }
-      if (payload.choices?.[0]?.finish_reason) finished = true;
+      if (payload.choices?.some((choice) => choice?.finish_reason)) finished = true;
+      if (typeof delta === 'string' && delta.length) {
+        text += delta;
+        return { type: 'text', delta };
+      }
       return null;
     };
 
