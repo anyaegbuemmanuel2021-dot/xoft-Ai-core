@@ -60,9 +60,13 @@ export class SocialHandleManager {
   _saveHandle(handle) {
     const data = this._data();
     const index = data.handles.findIndex((item) => item.id === handle.id);
-    if (index < 0) data.handles.push(handle); else data.handles[index] = handle;
+    const previous = index < 0 ? null : data.handles[index];
+    // Monotonic per-handle revision lets async operations detect intervening updates/kills,
+    // even when timestamps have only second-level precision or tests use a fixed clock.
+    const saved = { ...handle, revision: Number(previous?.revision ?? handle.revision ?? 0) + 1 };
+    if (index < 0) data.handles.push(saved); else data.handles[index] = saved;
     this.store.save(data);
-    return handle;
+    return saved;
   }
   create(input = {}) {
     const platform = bounded(input.platform, 'platform', 40).toLowerCase();
@@ -114,15 +118,29 @@ export class SocialHandleManager {
     if (!names.includes(current.publishTool)) throw new Error('Publishing tool "' + current.publishTool + '" was not found in the selected connector. Discover tools and choose the exact name.');
     return { valid: true, connectorId: current.connectorId, readTool: current.readTool, publishTool: current.publishTool, availableTools: names.length };
   }
-  setAutonomy(id, enabled, { confirmedBy } = {}) {
-    const current = this.get(id);
-    if (!current) return null;
+  async setAutonomy(id, enabled, { confirmedBy } = {}) {
+    const initial = this.get(id);
+    if (!initial) return null;
+    let current = initial;
     if (enabled) {
       if (!current.connectorId || !current.readTool || !current.publishTool) throw new Error('Set the connector, content-reading tool and publishing tool before enabling autonomy.');
       if (!safeText(confirmedBy, 120)) throw new Error('Enter the owner name to confirm this account may publish autonomously.');
       const connector = this.connectorManager.get(current.connectorId);
       if (!connector?.enabled) throw new Error('The selected connector is disabled.');
+
+      // Tool discovery is asynchronous. Re-check the per-handle revision afterwards so a KILL,
+      // edit, or removal during discovery cannot be overwritten by a stale enable request.
+      const startingRevision = Number(current.revision ?? 0);
+      await this.validateTools(id);
+      current = this.get(id);
+      if (!current) throw new Error('Social handle was removed while tool validation was running; autonomy remains off.');
+      if (Number(current.revision ?? 0) !== startingRevision) {
+        throw new Error('This handle changed while tools were being validated. The latest state (including any KILL action) was preserved; refresh and retry only if you still intend to enable autonomy.');
+      }
+      const latestConnector = this.connectorManager.get(current.connectorId);
+      if (!latestConnector?.enabled) throw new Error('The selected connector was disabled during validation.');
     }
+
     const next = { ...current, autoEnabled: Boolean(enabled), updatedAt: this.now().toISOString(), lastError: null };
     if (enabled) {
       next.nextRunAt = this.now().toISOString();
@@ -133,10 +151,10 @@ export class SocialHandleManager {
       next.nextRunAt = null;
       next.stoppedAt = this.now().toISOString();
     }
-    this._saveHandle(next);
+    const saved = this._saveHandle(next);
     if (!enabled) this.cancelQueuedForHandle(id);
-    this._log(enabled ? 'social_handle_autonomy_enabled' : 'social_handle_kill_switch_activated', { id, platform: next.platform, handle: next.handle, confirmedBy: next.autonomyConfirmedBy ?? null });
-    return next;
+    this._log(enabled ? 'social_handle_autonomy_enabled' : 'social_handle_kill_switch_activated', { id, platform: saved.platform, handle: saved.handle, confirmedBy: saved.autonomyConfirmedBy ?? null });
+    return saved;
   }
   kill(id, reason = 'Manual per-handle kill switch') {
     const current = this.get(id);
