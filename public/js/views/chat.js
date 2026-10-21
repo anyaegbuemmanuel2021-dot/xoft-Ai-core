@@ -35,6 +35,7 @@ export function render(container) {
   renderLog(container);
 
   onDelegate(container, 'click', '[data-mode]', (el) => {
+    if (activeController) return;
     mode = el.dataset.mode;
     render(container);
   });
@@ -68,6 +69,9 @@ function renderLog(container) {
 
 
 async function send(container) {
+  // Ignore Enter/button events while a request is active; otherwise a second
+  // blank assistant entry could be added while the first stream is running.
+  if (activeController) return;
   const input = container.querySelector('#chat-input');
   const text = input.value.trim();
   if (!text) return;
@@ -79,7 +83,6 @@ async function send(container) {
 
   const sendButton = container.querySelector('#chat-send');
   const stopButton = container.querySelector('#chat-stop');
-  if (activeController) return;
   sendButton.disabled = true;
   try {
     if (mode !== 'chat') {
