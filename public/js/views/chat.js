@@ -152,7 +152,7 @@ async function send(container, renderGeneration) {
     }
     if (serverError) throw new Error(serverError);
     if (!finalResult) throw new Error('XOFT stream ended before a final result was received.');
-    speakOut(assistantMessage.content);
+    if (isCurrentView()) speakOut(assistantMessage.content);
   } catch (err) {
     if (controller?.signal.aborted || err?.name === 'AbortError') {
       if (assistantMessage.content) assistantMessage.content += '\n\n[Generation stopped]';
