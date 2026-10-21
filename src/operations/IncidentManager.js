@@ -3,7 +3,7 @@ import { JsonStore } from '../persistence/JsonStore.js';
 
 const MAX_INCIDENTS = 1000;
 const MAX_EVENTS_PER_INCIDENT = 20;
-const SECRET_FIELD = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|authorization|cookie|private[_-]?key|secret)/i;
+const SECRET_FIELD = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|authorization|cookie|private[_-]?key|secret|token)/i;
 const SECRET_ASSIGNMENT = /((?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|password|authorization|cookie|secret)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}&]+)/gi;
 
 export function redactSensitive(value) {
@@ -96,7 +96,7 @@ export class IncidentManager {
       data.incidents.unshift(incident);
     }
 
-    data.incidents = data.incidents.slice(0, MAX_INCIDENTS);
+    data.incidents = [incident, ...data.incidents.filter((item) => item.id !== incident.id)].slice(0, MAX_INCIDENTS);
     this.store.save(data);
     const eventType = incident.count === 1 ? 'incident.created' : 'incident.updated';
     const detail = { incidentId: incident.id, fingerprint, source: safeSource, severity: incident.severity, count: incident.count, correlationId: cid };
