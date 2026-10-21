@@ -197,17 +197,26 @@ export class TaskPlanner {
    * exhausted its retries.
    * @param {string} taskId
    */
-  async execute(taskId) {
-    const timeoutMs = this.maxDurationMs;
+  async execute(taskId, { maxDurationMs } = {}) {
+    const requestedMs = Number(maxDurationMs);
+    const timeoutMs = Number.isFinite(requestedMs) && requestedMs > 0
+      ? Math.min(this.maxDurationMs, requestedMs)
+      : this.maxDurationMs;
+    const controller = new AbortController();
     let timer;
-    const work = this._executeTask(taskId);
+    const work = this._executeTask(taskId, { signal: controller.signal });
     const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`TaskPlanner: task '${taskId}' exceeded the maximum duration of ${timeoutMs}ms.`)), timeoutMs);
+      timer = setTimeout(() => {
+        const error = new Error(`TaskPlanner: task '${taskId}' exceeded the maximum duration of ${timeoutMs}ms.`);
+        error.code = 'TASK_TIMEOUT';
+        reject(error);
+        controller.abort(error);
+      }, timeoutMs);
     });
     try {
       return await Promise.race([work, timeout]);
     } catch (err) {
-      if (String(err?.message).includes('exceeded the maximum duration')) {
+      if (err?.code === 'TASK_TIMEOUT' || String(err?.message).includes('exceeded the maximum duration')) {
         const task = this._getTask(taskId);
         this._updateTask(taskId, (t) => ({ ...t, status: 'timed_out', timedOutAt: new Date().toISOString(), timeoutMs, error: err.message }));
         this.activityLog.log({ type: 'task_timed_out', taskId, detail: { timeoutMs } });
@@ -219,7 +228,7 @@ export class TaskPlanner {
     }
   }
 
-  async _executeTask(taskId) {
+  async _executeTask(taskId, { signal } = {}) {
     let task = this._getTask(taskId);
     if (task.status === 'blocked') return task;
 
@@ -228,6 +237,7 @@ export class TaskPlanner {
     if (!alreadyStarted) this.eventBus?.emitEvent(EventType.TASK_STARTED, { taskId, goal: task.goal });
 
     for (const step of task.steps) {
+      if (signal?.aborted) throw signal.reason ?? new Error('Task execution aborted.');
       if (step.status === 'completed') continue;
 
       const dependenciesDone = step.dependsOn.every(
@@ -238,7 +248,8 @@ export class TaskPlanner {
         break;
       }
 
-      const stepResult = await this._runStep(taskId, step);
+      const stepResult = await this._runStep(taskId, step, { signal });
+      if (signal?.aborted) throw signal.reason ?? new Error('Task execution aborted.');
       task = this._getTask(taskId);
 
       if (stepResult.status === 'waiting_approval') {
@@ -272,13 +283,13 @@ export class TaskPlanner {
    * approval request and chase its own tail. Only evaluates risk fresh
    * for a step that hasn't been through approval before.
    */
-  async _runStep(taskId, step) {
+  async _runStep(taskId, step, { signal } = {}) {
     const tool = this.toolRegistry.get(step.toolName);
 
     if (step.status === 'waiting_approval' && step.approvalId) {
       const record = this.approvalSystem.get(step.approvalId);
       if (record?.status === 'approved') {
-        return this._executeStep(taskId, { ...step, forceRetryAfterAmbiguous: Boolean(record.reason === 'ambiguous_prior_execution') }, tool);
+        return this._executeStep(taskId, { ...step, forceRetryAfterAmbiguous: Boolean(record.reason === 'ambiguous_prior_execution') }, tool, { signal });
       }
       if (record?.status === 'rejected') {
         this._patchStep(taskId, step.id, { status: 'failed', error: 'approval rejected' });
@@ -330,7 +341,7 @@ export class TaskPlanner {
     return this._executeStep(taskId, step, tool);
   }
 
-  async _executeStep(taskId, step, tool) {
+  async _executeStep(taskId, step, tool, { signal } = {}) {
     const idempotencyKey = step.idempotencyKey ?? ExecutionRecordStore.keyFor(taskId, step.id);
 
     // Idempotency check — the actual duplicate-execution guard. If this exact
@@ -351,15 +362,26 @@ export class TaskPlanner {
     const attemptNumber = (step.attempts ?? 0) + 1;
     const record = this.executionRecordStore.begin({ taskId, stepId: step.id, toolName: tool.name, idempotencyKey, attemptNumber, input: step.input });
     try {
-      const result = await this.toolRegistry.execute(tool.name, step.input, { memory: this.memory, providerRouter: this.router, deviceManager: this.deviceManager });
+      const result = await this.toolRegistry.execute(tool.name, step.input, { memory: this.memory, providerRouter: this.router, deviceManager: this.deviceManager, signal, idempotencyKey, correlationId: `${taskId}:${step.id}` });
+      if (signal?.aborted) throw signal.reason ?? new Error('Task execution aborted after tool completion.');
       this.eventBus?.emitEvent(EventType.TASK_VERIFYING, { taskId, stepId: step.id, toolName: tool.name });
       const verification = await this._verifyResult(tool, step, result);
+      if (signal?.aborted) throw signal.reason ?? new Error('Task execution aborted during verification.');
       this.executionRecordStore.complete(record.executionId, { status: 'succeeded', result, verification });
       this.activityLog.log({ type: 'tool_executed', taskId, toolName: tool.name, detail: { input: step.input, result, verification } });
       const undo = tool.computeUndo ? tool.computeUndo(step.input, result) : null;
       this._patchStep(taskId, step.id, { status: 'completed', result, error: null, undo, verification });
       return { status: 'completed', result };
     } catch (err) {
+      if (signal?.aborted || err?.code === 'TASK_TIMEOUT') {
+        // Leave the execution record as running: the external side effect may have
+        // completed even though its response was lost. The existing dangling-record
+        // guard will require fresh approval before an EXTERNAL/HIGH_IMPACT retry.
+        const message = 'Execution was interrupted by the task deadline; external side-effect outcome may be uncertain.';
+        this._patchStep(taskId, step.id, { status: 'failed', attempts: (step.attempts ?? 0) + 1, error: message, ambiguousExecution: true });
+        this.activityLog.log({ type: 'tool_execution_interrupted', taskId, toolName: tool.name, detail: { idempotencyKey, executionId: record.executionId, reason: 'timeout' } });
+        return { status: 'failed', error: message, ambiguous: true };
+      }
       this.executionRecordStore.complete(record.executionId, { status: 'failed', error: err.message });
       if (err?.code === 'XOFT_VERIFICATION_REQUIRED') {
         const challenge = {
