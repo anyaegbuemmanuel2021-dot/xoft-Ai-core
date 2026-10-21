@@ -474,19 +474,54 @@ app.use(express.static('public'));
 // Routed through the Executive Brain: plain conversation/memory ops still go
 // straight to the existing Orchestrator; world-state questions, multi-step
 // goals, and confirm/cancel of a pending plan are handled by the brain.
+
 app.post('/api/chat', async (req, res) => {
-  const { sessionId, message, userId } = req.body ?? {};
-  if (!sessionId || !message) {
-    return res.status(400).json({ error: 'sessionId and message are required' });
+  const { sessionId, message, userId, stream: wantsStream } = req.body ?? {};
+  if (!sessionId || !message) return res.status(400).json({ error: 'sessionId and message are required' });
+  const who = typeof userId === 'string' && userId.trim() ? userId.trim().slice(0, 80) : (req.deviceAuth ?? 'web-user');
+
+  if (wantsStream === true) {
+    const controller = new AbortController();
+    res.status(200);
+    res.set({
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders?.();
+    res.on('close', () => { if (!res.writableEnded) controller.abort(); });
+    const sendEvent = (name, payload) => {
+      if (!res.destroyed) res.write(`event: ${name}\ndata: ${JSON.stringify(payload)}\n\n`);
+    };
+    try {
+      for await (const event of channelGateway.handleStream(
+        { channel: 'web', userId: who, sessionId, message },
+        { signal: controller.signal },
+      )) {
+        if (res.destroyed) break;
+        if (event.type === 'text') sendEvent('delta', { delta: event.delta });
+        else if (event.type === 'done') sendEvent('done', event.result);
+      }
+      if (!res.writableEnded && !res.destroyed) res.end();
+    } catch (err) {
+      if (!res.destroyed) {
+        const ai = aiErrorToHttp(err);
+        sendEvent('error', {
+          error: ai?.body?.error ?? 'CHAT_STREAM_FAILED',
+          message: String(ai?.body?.message ?? err?.message ?? 'XOFT streaming request failed').slice(0, 500),
+          attempts: ai?.body?.attempts,
+        });
+        res.end();
+      }
+    }
+    return;
   }
+
   try {
-    // Optional body.userId lets several people share one login/device and still be addressed correctly.
-    const who = typeof userId === 'string' && userId.trim() ? userId.trim().slice(0, 80) : (req.deviceAuth ?? 'web-user');
     const result = await channelGateway.handle({ channel: 'web', userId: who, sessionId, message });
     res.json(result);
   } catch (err) {
-    // No AI provider / all providers failed => a clean structured 503/502 ({success:false,error:'NO_AI_PROVIDER_AVAILABLE',...}); the
-    // rest of Xoft (files, devices, automation, settings, logs…) is unaffected and the UI can show a friendly state.
     const ai = aiErrorToHttp(err);
     if (ai) return res.status(ai.status).json(ai.body);
     res.status(500).json({ error: err.message });

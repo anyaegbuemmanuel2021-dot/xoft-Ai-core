@@ -257,9 +257,26 @@ window.addEventListener('offline', () => {
   events.dispatchEvent(new Event('offline'));
 });
 
+
+/** Authenticated streaming POST. Streams are not queued offline because delayed
+ * replay would be surprising and could repeat an action after the user retries.
+ */
+async function apiStreamPost(path, body, { signal } = {}) {
+  const res = await rawFetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.body) throw new Error('Streaming response has no readable body.');
+  return res;
+}
+
 export const api = {
   get: apiGet,
   post: (path, body) => apiSend('POST', path, body),
+  streamPost: apiStreamPost,
   patch: (path, body) => apiSend('PATCH', path, body),
   put: (path, body) => apiSend('PUT', path, body),
   del: path => apiSend('DELETE', path),

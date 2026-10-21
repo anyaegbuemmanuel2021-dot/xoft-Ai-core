@@ -63,27 +63,75 @@ function renderLog(container) {
   log.scrollTop = log.scrollHeight;
 }
 
+
 async function send(container) {
   const input = container.querySelector('#chat-input');
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
   history.push({ role: 'user', content: text });
+  const assistantMessage = { role: 'assistant', content: '' };
+  history.push(assistantMessage);
   renderLog(container);
 
   try {
-    const endpoint = mode === 'chat' ? '/api/chat' : '/api/advise';
-    const body = mode === 'chat' ? { message: text, sessionId: sessionId() } : { problem: text };
-    const result = await api.post(endpoint, body);
-    if (result.__queued) {
-      history.push({ role: 'assistant', content: '(offline — this message is queued and will send once back online)' });
-    } else {
-      history.push({ role: 'assistant', content: result.reply ?? result.advice ?? JSON.stringify(result) });
-      speakOut(result.reply ?? result.advice ?? JSON.stringify(result));
+    if (mode !== 'chat') {
+      history.pop();
+      const result = await api.post('/api/advise', { problem: text });
+      const reply = result.advice ?? JSON.stringify(result);
+      history.push({ role: 'assistant', content: reply });
+      speakOut(reply);
+      renderLog(container);
+      return;
     }
+    if (!navigator.onLine) throw new Error('You are offline. XOFT streaming chat cannot be queued safely; reconnect and try again.');
+
+    const response = await api.streamPost('/api/chat', { message: text, sessionId: sessionId(), stream: true });
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResult = null;
+    let serverError = null;
+    const handleEvent = (raw) => {
+      let eventName = 'message';
+      const dataLines = [];
+      for (const line of raw.split(/\r?\n/)) {
+        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+      }
+      if (!dataLines.length) return;
+      let payload;
+      try { payload = JSON.parse(dataLines.join('\n')); } catch { return; }
+      if (eventName === 'delta') {
+        assistantMessage.content += String(payload.delta ?? '');
+        renderLog(container);
+      } else if (eventName === 'done') {
+        finalResult = payload;
+        assistantMessage.content = String(payload.reply ?? assistantMessage.content);
+        renderLog(container);
+      } else if (eventName === 'error') {
+        serverError = String(payload.message ?? payload.error ?? 'XOFT streaming request failed.');
+      }
+    };
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+        const events = buffer.split(/\r?\n\r?\n/);
+        buffer = events.pop() ?? '';
+        for (const event of events) handleEvent(event);
+        if (done) break;
+      }
+      if (buffer.trim()) handleEvent(buffer);
+    } finally {
+      reader.releaseLock();
+    }
+    if (serverError) throw new Error(serverError);
+    if (!finalResult) throw new Error('XOFT stream ended before a final result was received.');
+    speakOut(assistantMessage.content);
   } catch (err) {
-    // The server answers AI outages with a structured body ({success:false,error:'NO_AI_PROVIDER_AVAILABLE'|'AI_PROVIDERS_FAILED',...});
-    // api.js wraps it as "<status> <json>". Show a calm explanation instead of raw JSON — the rest of Xoft is unaffected.
+    if (!history.includes(assistantMessage)) history.push(assistantMessage);
     let friendly = null;
     try {
       const body = JSON.parse(String(err.message).replace(/^\d{3}\s+/, ''));
@@ -101,7 +149,8 @@ async function send(container) {
         friendly = ['XOFT is running, but its configured AI providers could not answer.', ...providerAdvice, 'Fix the provider issue, then retry. Check Settings → AI providers for configuration and connection tests.'].join(' ');
       }
     } catch { /* not a structured AI error */ }
-    history.push({ role: 'assistant', content: friendly ?? `Error: ${err.message}` });
+    if (assistantMessage.content) assistantMessage.content += `\n\n[Stream interrupted: ${friendly ?? err.message}]`;
+    else assistantMessage.content = friendly ?? `Error: ${err.message}`;
     toast(friendly ? 'AI is unavailable' : err.message, friendly ? 'warn' : 'err');
   }
   renderLog(container);
