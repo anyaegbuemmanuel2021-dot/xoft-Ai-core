@@ -17,6 +17,7 @@ import * as runtime from './views/runtime.js';
 import * as engines from './views/engines.js';
 import * as approvals from './views/approvals.js';
 import * as automation from './views/automation.js';
+import * as schedule from './views/schedule.js';
 import * as activity from './views/activity.js';
 import * as settings from './views/settings.js';
 import * as integrations from './views/integrations.js';
@@ -30,6 +31,7 @@ const ICONS = {
   missions: '<path d="M12 3 14.8 8.7 21 9.6l-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3z"/>',
   memory: '<path d="M9 3H5a2 2 0 0 0-2 2v4m0 6v4a2 2 0 0 0 2 2h4m6-18h4a2 2 0 0 1 2 2v4m0 6v4a2 2 0 0 1-2 2h-4"/><path d="M9 8h6a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2zM10 5v3m4-3v3m-4 8v3m4-3v3"/>',
   automation: '<path d="M12 8V4H8"/><path d="M4.9 19.1A8 8 0 1 0 4 12"/><path d="M4 4v5h5"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="m9 15 2 2 4-4"/>',
   approvals: '<path d="m5 12 4 4L19 6"/><circle cx="12" cy="12" r="10"/>',
   devices: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>',
   runtime: '<path d="M12 2 4 6v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-4z"/><path d="m9 12 2 2 4-4"/>',
@@ -45,7 +47,7 @@ const icon = (name) => `<svg class="nav-icon" viewBox="0 0 24 24" width="18" hei
 const NAV = [
   { group: 'Workspace', items: [['command', 'Command Center', command, 'command'], ['overview', 'Overview', overview, 'overview'], ['chat', 'Chat', chat, 'chat']] },
   { group: 'Intelligence', items: [['tasks', 'Tasks', tasks, 'tasks'], ['engines', 'Agents', engines, 'agents'], ['missions', 'Missions & Goals', missions, 'missions'], ['opportunities', 'Opportunities', opportunities, 'missions'], ['delivery', 'Project Delivery', delivery, 'tasks'], ['social', 'Social Studio', social, 'plugins'], ['memory', 'Memory', memory, 'memory']] },
-  { group: 'Automation', items: [['automation', 'Automations', automation, 'automation'], ['approvals', 'Approvals', approvals, 'approvals'], ['integrations', 'Plugins & Apps', integrations, 'plugins']] },
+  { group: 'Automation', items: [['schedule', 'Schedule & Jobs', schedule, 'calendar'], ['automation', 'Automations', automation, 'automation'], ['approvals', 'Approvals', approvals, 'approvals'], ['integrations', 'Plugins & Apps', integrations, 'plugins']] },
   { group: 'System', items: [['devices', 'Devices', devices, 'devices'], ['runtime', 'Device Runtime', runtime, 'runtime'], ['activity', 'Activity Log', activity, 'activity'], ['settings', 'Runtime Settings', settings, 'settings']] },
 ];
 
