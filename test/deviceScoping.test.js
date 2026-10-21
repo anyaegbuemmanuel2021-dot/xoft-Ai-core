@@ -4,12 +4,22 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const ADMIN_KEY = 'admin-secret-key';
 
-async function bootServer(port) {
+async function freePort() {
+  const server = net.createServer();
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  const { port } = server.address();
+  await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+  return port;
+}
+
+async function bootServer(port = null) {
+  port = port ?? await freePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-device-scope-test-'));
   const child = spawn(process.execPath, [path.join(ROOT, 'src', 'index.js')], {
     cwd: ROOT,
@@ -17,7 +27,9 @@ async function bootServer(port) {
     stdio: 'pipe',
   });
   let stderr = '';
+  let stdout = '';
   child.stderr.on('data', (d) => { stderr += d.toString(); });
+  child.stdout.on('data', (d) => { stdout += d.toString(); });
 
   const base = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + 10_000;
@@ -27,7 +39,7 @@ async function bootServer(port) {
       if (res.status === 200) break;
     } catch { /* not up yet */ }
     await new Promise((r) => setTimeout(r, 150));
-    if (child.exitCode !== null) throw new Error(`Server exited early: ${stderr}`);
+    if (child.exitCode !== null) throw new Error(`Server exited early (port ${port}). stdout: ${stdout}\nstderr: ${stderr}`);
   }
 
   async function call(method, urlPath, { key, body } = {}) {
@@ -53,7 +65,7 @@ async function bootServer(port) {
 
 describe('Per-device token scoping (Phase 3F)', { concurrency: false }, () => {
   test('a device token authenticates but is rejected by requireAdmin on trust/revoke/permission-grant', async () => {
-    const server = await bootServer(35801);
+    const server = await bootServer();
     try {
       const a = await server.registerAndTrust('device-a');
       assert.ok(a.token, 'trust must return a real device token');
