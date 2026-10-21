@@ -6,6 +6,7 @@ export let cleanup = null;
 
 let viewGeneration = 0;
 let refreshTimer = null;
+let currentJobs = [];
 
 const BUDGETS = [
   [60_000, '1 minute'],
@@ -90,7 +91,10 @@ async function refreshJobs(container, generation) {
   if (!list) return;
   try {
     const jobs = await fetchJobs();
-    if (generation === viewGeneration && container.isConnected) list.innerHTML = jobsHtml(jobs);
+    if (generation === viewGeneration && container.isConnected) {
+      currentJobs = jobs;
+      list.innerHTML = jobsHtml(jobs);
+    }
   } catch (error) {
     if (generation === viewGeneration && container.isConnected) {
       list.innerHTML = `<div class="empty">Could not refresh jobs: ${esc(error.message)} <button data-job-action="refresh">Retry</button></div>`;
@@ -114,6 +118,7 @@ export async function render(container) {
   }
   if (!isCurrent()) return;
 
+  currentJobs = jobs;
   const toolOptions = tools.length
     ? tools.map((tool) => `<option value="${esc(tool.name)}">${esc(tool.name)} — ${esc(tool.description || 'SAFE/LOW risk')}</option>`).join('')
     : '<option value="">No implemented SAFE/LOW-risk tools available</option>';
@@ -202,7 +207,7 @@ export async function render(container) {
     if (action === 'refresh') { await refreshJobs(container, generation); return; }
     const id = button.dataset.jobId;
     if (!id) return;
-    const job = jobs.find((item) => item.id === id);
+    const job = currentJobs.find((item) => item.id === id);
     if (action === 'cancel') {
       const running = job?.status === 'running';
       const warning = running
