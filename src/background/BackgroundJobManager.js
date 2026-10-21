@@ -37,6 +37,7 @@ export class BackgroundJobManager {
     this.incidentManager = incidentManager;
     this._store = new JsonStore({ dataDir, fileName: 'background_jobs.json', kvKey: 'background_jobs', defaultValue: { jobs: [] }, sqliteStore });
     this._timers = new Map();
+    this.activeControllers = new Map();
   }
   _load() { return this._store.load(); }
   _save(data) { this._store.save(data); }
@@ -81,18 +82,24 @@ export class BackgroundJobManager {
   _clearTimer(id){const t=this._timers.get(id);if(t){clearTimeout(t);this._timers.delete(id);}}
   async _run(jobId){
     const job=this._load().jobs.find(j=>j.id===jobId);
-    if(!job||job.status==='cancelled'||job.status==='paused')return;
+    if(!job||['cancelled','paused','running','completed','waiting_approval','waiting_verification','blocked'].includes(job.status))return;
     // Stable across retries/recovery of one scheduled execution, unique for each recurring run.
     const executionIdempotencyKey = job.executionIdempotencyKey || `${job.id}:${job.runAt ?? job.createdAt}`;
-    this._patch(jobId,j=>{j.status='running';j.executionIdempotencyKey=executionIdempotencyKey;j.startedAt=new Date().toISOString();j.updatedAt=j.startedAt;});
+    const controller = new AbortController();
+    this.activeControllers.set(jobId, controller);
+    this._patch(jobId,j=>{if(['cancelled','paused'].includes(j.status))return;j.status='running';j.executionIdempotencyKey=executionIdempotencyKey;j.startedAt=new Date().toISOString();j.updatedAt=j.startedAt;});
+    const startedJob = this.get(jobId);
+    if (controller.signal.aborted || !startedJob || startedJob.status !== 'running') {
+      if (this.activeControllers.get(jobId) === controller) this.activeControllers.delete(jobId);
+      return;
+    }
     try {
       let result;
       if(job.kind==='task') {
         // TaskPlanner already enforces its own bounded duration and per-step idempotency keys.
         if(!this.taskPlanner) throw new Error('Task planner unavailable');
-        result=await this.taskPlanner.execute(job.taskId, { maxDurationMs: job.maxRunMs });
+        result=await this.taskPlanner.execute(job.taskId, { maxDurationMs: job.maxRunMs, signal: controller.signal });
       } else {
-        const controller = new AbortController();
         const maxRunMs = normalizeBudget(job.maxRunMs);
         const deadlineAt = new Date(Date.now() + maxRunMs).toISOString();
         let timeoutHandle;
@@ -101,6 +108,11 @@ export class BackgroundJobManager {
         const work = this.toolRegistry.execute(job.toolName, job.input, {
           memory: this.memory, taskId: job.taskId, source: 'background_job',
           signal: controller.signal, idempotencyKey: executionIdempotencyKey, correlationId: job.correlationId, deadlineAt,
+        });
+        const cancellation = new Promise((_, reject) => {
+          controller.signal.addEventListener('abort', () => {
+            if (controller.signal.reason?.code === 'BACKGROUND_JOB_CANCELLED') reject(controller.signal.reason);
+          }, { once: true });
         });
         const timeout = new Promise((_, reject) => {
           timeoutHandle = setTimeout(() => {
@@ -112,7 +124,7 @@ export class BackgroundJobManager {
           }, maxRunMs);
         });
         try {
-          result = await Promise.race([work, timeout]);
+          result = await Promise.race([work, timeout, cancellation]);
         } catch (error) {
           if (timedOut) throw timeoutError;
           throw error;
@@ -122,11 +134,39 @@ export class BackgroundJobManager {
       }
       const failed=job.kind==='task' && result?.status==='failed';
       if(failed) throw new Error(`Scheduled task failed: ${result.steps?.find(s=>s.status==='failed')?.error || 'unknown task failure'}`);
+      if (job.kind === 'task' && ['waiting_approval','waiting_verification','blocked','cancelled'].includes(result?.status)) {
+        const status = result.status;
+        const at = new Date().toISOString();
+        this._patch(jobId,j=>{j.status=status;j.lastRunAt=at;j.lastResult=result;j.lastError=null;j.runAt=null;j.updatedAt=at;j.finishedAt=status==='cancelled'?at:null;});
+        this.activityLog.log({type:status==='cancelled'?'background_job_cancelled':'background_job_waiting_for_task',detail:{jobId,taskId:job.taskId,status,correlationId:job.correlationId}});
+        if(status==='cancelled' && job.kind!=='task') this.eventBus?.emitEvent(EventType.TASK_CANCELLED,{jobId,taskId:job.taskId,correlationId:job.correlationId});
+        return;
+      }
       const nextRun=job.kind==='recurring'?new Date(Date.now()+job.intervalMs).toISOString():null;
       this._patch(jobId,j=>{j.status=job.kind==='recurring'?'scheduled':'completed';j.lastRunAt=new Date().toISOString();j.finishedAt=j.lastRunAt;j.updatedAt=j.lastRunAt;j.lastResult=result;j.lastError=null;j.attempts=0;j.executionIdempotencyKey=job.kind==='recurring'?null:executionIdempotencyKey;j.runAt=nextRun;});
       this.activityLog.log({type:'background_job_ran',detail:{jobId,kind:job.kind,toolName:job.toolName,taskId:job.taskId,result}});
       if(job.kind==='recurring') this._arm(this.get(jobId)); else {this._clearTimer(jobId);this.eventBus?.emitEvent(EventType.TASK_COMPLETED,{jobId,toolName:job.toolName,taskId:job.taskId});}
     } catch(err) {
+      const current = this.get(jobId);
+      const cancelled = err?.code === 'BACKGROUND_JOB_CANCELLED' || current?.status === 'cancelled';
+      if (cancelled) {
+        const safeError = redactSensitive(err?.message ?? 'Cancelled by operator');
+        const uncertain = Boolean(current?.sideEffectOutcomeUncertain);
+        let incident = null;
+        if (uncertain) {
+          try {
+            incident = this.incidentManager?.capture(err, {
+              source: 'background_job_cancelled', severity: 'warning', correlationId: job.correlationId,
+              context: { jobId, kind: job.kind, toolName: job.toolName, taskId: job.taskId, idempotencyKey: executionIdempotencyKey },
+            }) ?? null;
+          } catch { /* preserve cancellation even if telemetry fails */ }
+        }
+        this._patch(jobId,j=>{j.status='cancelled';j.lastError=safeError;j.finishedAt=j.finishedAt??new Date().toISOString();j.updatedAt=j.finishedAt;j.runAt=null;});
+        this._clearTimer(jobId);
+        this.activityLog.log({type:'background_job_cancelled',detail:{jobId,taskId:job.taskId,sideEffectOutcomeUncertain:uncertain,incidentId:incident?.id??null,correlationId:job.correlationId}});
+        if (job.kind !== 'task') this.eventBus?.emitEvent(EventType.TASK_CANCELLED,{jobId,taskId:job.taskId,reason:'operator_cancelled',sideEffectOutcomeUncertain:uncertain,correlationId:job.correlationId});
+        return;
+      }
       const attempts=(job.attempts||0)+1;
       const timedOut = err?.code === 'BACKGROUND_JOB_TIMEOUT' || err?.code === 'TASK_TIMEOUT' || job.kind === 'task' && String(err?.message ?? '').includes('exceeded the maximum duration');
       const safeError = redactSensitive(err?.message ?? err);
@@ -145,7 +185,7 @@ export class BackgroundJobManager {
         this._patch(jobId,j=>{j.status='timed_out';j.attempts=attempts;j.lastError=safeError;j.timeoutMs=job.maxRunMs;j.runAt=null;j.finishedAt=new Date().toISOString();j.updatedAt=j.finishedAt;});
         this._clearTimer(jobId);
         this.eventBus?.emitEvent(EventType.TASK_FAILED,{jobId,toolName:job.toolName,taskId:job.taskId,error:safeError,reason:'timeout',incidentId:incident?.id ?? null,correlationId:job.correlationId});
-      } else if(attempts<=MAX_JOB_RETRIES){
+      } else if(job.kind !== 'task' && attempts<=MAX_JOB_RETRIES){
         const backoff=BASE_BACKOFF_MS*2**(attempts-1);
         this._patch(jobId,j=>{j.status='retry_wait';j.attempts=attempts;j.lastError=safeError;j.updatedAt=new Date().toISOString();j.runAt=new Date(Date.now()+backoff).toISOString();});
         this._arm(this.get(jobId));
@@ -153,11 +193,47 @@ export class BackgroundJobManager {
         this._patch(jobId,j=>{j.status='failed';j.attempts=attempts;j.lastError=safeError;j.finishedAt=new Date().toISOString();j.updatedAt=j.finishedAt;});
         this._clearTimer(jobId);this.eventBus?.emitEvent(EventType.TASK_FAILED,{jobId,toolName:job.toolName,taskId:job.taskId,error:safeError,incidentId:incident?.id ?? null,correlationId:job.correlationId});
       }
+    } finally {
+      if (this.activeControllers.get(jobId) === controller) this.activeControllers.delete(jobId);
     }
   }
-  pause(id){this._clearTimer(id);return this._patch(id,j=>{j.status='paused';});}
-  resume(id){const j=this._patch(id,j=>{j.status='scheduled';j.runAt=j.runAt||new Date().toISOString();});if(j)this._arm(j);return j;}
-  cancel(id){this._clearTimer(id);const j=this._patch(id,j=>{j.status='cancelled';});this.activityLog.log({type:'background_job_cancelled',detail:{jobId:id}});return j;}
+  pause(id){
+    const current = this.get(id);
+    if (!current) return null;
+    if (!['scheduled','retry_wait','paused'].includes(current.status)) throw new Error('Only scheduled or retry-wait jobs can be paused; cancel a running job instead.');
+    this._clearTimer(id);
+    return this._patch(id,j=>{j.status='paused';j.updatedAt=new Date().toISOString();});
+  }
+  resume(id){
+    const current = this.get(id);
+    if (!current) return null;
+    if (!['paused','interrupted','failed','timed_out'].includes(current.status)) throw new Error('Only paused, interrupted, failed, or timed-out jobs can be resumed.');
+    const j=this._patch(id,j=>{j.status='scheduled';j.runAt=new Date().toISOString();j.updatedAt=j.runAt;});
+    if(j)this._arm(j);
+    return j;
+  }
+  cancel(id){
+    const current = this.get(id);
+    if (!current) return null;
+    if (['completed','cancelled'].includes(current.status)) return current;
+    this._clearTimer(id);
+    const controller = this.activeControllers.get(id);
+    const wasRunning = current.status === 'running';
+    const uncertain = Boolean(controller && wasRunning);
+    if (controller && !controller.signal.aborted) {
+      const error = new Error(`Background job '${id}' cancellation requested; external side-effect outcome may be uncertain.`);
+      error.code = 'BACKGROUND_JOB_CANCELLED';
+      controller.abort(error);
+    }
+    if (current.kind === 'task' && (!controller || !wasRunning) && this.taskPlanner && current.taskId) {
+      try { this.taskPlanner.cancel(current.taskId); } catch { /* cancellation state is still recorded below */ }
+    }
+    const at = new Date().toISOString();
+    const j=this._patch(id,j=>{j.status='cancelled';j.cancelledAt=at;j.sideEffectOutcomeUncertain=uncertain;j.runAt=null;j.updatedAt=at;});
+    this.activityLog.log({type:'background_job_cancelled',detail:{jobId:id,sideEffectOutcomeUncertain:uncertain}});
+    if ((!controller || !wasRunning) && current.kind !== 'task') this.eventBus?.emitEvent(EventType.TASK_CANCELLED,{jobId:id,taskId:current.taskId,reason:'operator_cancelled',sideEffectOutcomeUncertain:false,correlationId:current.correlationId});
+    return j;
+  }
   loadAndSchedule(){
     const data = this._load();
     let recovered = 0;

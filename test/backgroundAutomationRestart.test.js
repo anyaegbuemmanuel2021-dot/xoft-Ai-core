@@ -209,6 +209,41 @@ describe('BackgroundJobManager — incidents and interrupted-job recovery', () =
     } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
   });
 
+  test('cancelling a running background tool aborts promptly and marks the outcome uncertain', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-job-cancel-running-'));
+    const activityLog = new ActivityLog({ dataDir });
+    const eventBus = new EventBus({ activityLog });
+    const toolRegistry = new ToolRegistry({ defaultDeviceId: 'local' });
+    let startedResolve;
+    const started = new Promise((resolve) => { startedResolve = resolve; });
+    let receivedSignal = null;
+    let calls = 0;
+    toolRegistry.register({
+      name: 'test.noncooperative-tool', description: 'ignores abort after start', inputSchema: {},
+      riskLevel: 0, requiredPermissions: [], status: 'implemented',
+      async run(_input, context) {
+        calls += 1;
+        receivedSignal = context.signal;
+        startedResolve();
+        return new Promise(() => {});
+      },
+    });
+    const manager = new BackgroundJobManager({ toolRegistry, taskPlanner: null, activityLog, eventBus, memory: null, dataDir });
+    try {
+      const job = manager.scheduleOnce({ toolName: 'test.noncooperative-tool', input: {}, delayMs: 0, maxRunMs: 600000 });
+      await started;
+      const cancelled = manager.cancel(job.id);
+      await sleep(50);
+      const stored = manager.get(job.id);
+      assert.equal(cancelled.status, 'cancelled');
+      assert.equal(stored.status, 'cancelled');
+      assert.equal(stored.sideEffectOutcomeUncertain, true);
+      assert.equal(receivedSignal.aborted, true);
+      assert.equal(calls, 1);
+      assert.equal(manager.activeControllers.has(job.id), false);
+    } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
+  });
+
   test('direct background jobs reject EXTERNAL tools so approval gates cannot be bypassed', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-job-risk-guard-'));
     const activityLog = new ActivityLog({ dataDir });

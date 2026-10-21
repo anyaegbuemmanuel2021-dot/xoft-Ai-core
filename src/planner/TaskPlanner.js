@@ -197,14 +197,27 @@ export class TaskPlanner {
    * exhausted its retries.
    * @param {string} taskId
    */
-  async execute(taskId, { maxDurationMs } = {}) {
+  async execute(taskId, { maxDurationMs, signal: externalSignal } = {}) {
     const requestedMs = Number(maxDurationMs);
     const timeoutMs = Number.isFinite(requestedMs) && requestedMs > 0
       ? Math.min(this.maxDurationMs, requestedMs)
       : this.maxDurationMs;
     const controller = new AbortController();
+    const relayExternalAbort = () => {
+      const reason = externalSignal?.reason instanceof Error
+        ? externalSignal.reason
+        : Object.assign(new Error('Task execution cancelled by its owner.'), { code: 'BACKGROUND_JOB_CANCELLED' });
+      if (!controller.signal.aborted) controller.abort(reason);
+    };
+    if (externalSignal?.aborted) relayExternalAbort();
+    else externalSignal?.addEventListener('abort', relayExternalAbort, { once: true });
     let timer;
     const work = this._executeTask(taskId, { signal: controller.signal });
+    const cancellation = new Promise((_, reject) => {
+      controller.signal.addEventListener('abort', () => {
+        if (controller.signal.reason?.code === 'BACKGROUND_JOB_CANCELLED') reject(controller.signal.reason);
+      }, { once: true });
+    });
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(() => {
         const error = new Error(`TaskPlanner: task '${taskId}' exceeded the maximum duration of ${timeoutMs}ms.`);
@@ -214,17 +227,35 @@ export class TaskPlanner {
       }, timeoutMs);
     });
     try {
-      return await Promise.race([work, timeout]);
+      return await Promise.race([work, timeout, cancellation]);
     } catch (err) {
+      const task = this._getTask(taskId);
       if (err?.code === 'TASK_TIMEOUT' || String(err?.message).includes('exceeded the maximum duration')) {
-        const task = this._getTask(taskId);
-        this._updateTask(taskId, (t) => ({ ...t, status: 'timed_out', timedOutAt: new Date().toISOString(), timeoutMs, error: err.message }));
+        const message = 'Execution was interrupted by the task deadline; external side-effect outcome may be uncertain.';
+        this._updateTask(taskId, (t) => ({
+          ...t, status: 'timed_out', timedOutAt: new Date().toISOString(), timeoutMs, error: err.message,
+          steps: t.steps.map((step) => step.status === 'running'
+            ? { ...step, status: 'failed', error: message, ambiguousExecution: true }
+            : step),
+        }));
         this.activityLog.log({ type: 'task_timed_out', taskId, detail: { timeoutMs } });
-        this.eventBus?.emitEvent(EventType.TASK_FAILED, { taskId, goal: task.goal, reason: 'timeout' });
+        this.eventBus?.emitEvent(EventType.TASK_FAILED, { taskId, goal: task?.goal, reason: 'timeout' });
+      } else if (err?.code === 'BACKGROUND_JOB_CANCELLED') {
+        const at = new Date().toISOString();
+        const message = 'Execution was cancelled; external side-effect outcome may be uncertain.';
+        this._updateTask(taskId, (t) => ({
+          ...t, status: 'cancelled', completedAt: t.completedAt ?? at, error: err.message,
+          steps: t.steps.map((step) => step.status === 'running'
+            ? { ...step, status: 'cancelled', error: message, ambiguousExecution: true }
+            : ['pending', 'waiting_approval'].includes(step.status) ? { ...step, status: 'cancelled' } : step),
+        }));
+        this.activityLog.log({ type: 'task_cancelled', taskId, detail: { sideEffectOutcomeUncertain: true } });
+        this.eventBus?.emitEvent(EventType.TASK_CANCELLED, { taskId, goal: task?.goal, sideEffectOutcomeUncertain: true });
       }
       throw err;
     } finally {
       clearTimeout(timer);
+      externalSignal?.removeEventListener('abort', relayExternalAbort);
     }
   }
 
@@ -373,14 +404,17 @@ export class TaskPlanner {
       this._patchStep(taskId, step.id, { status: 'completed', result, error: null, undo, verification });
       return { status: 'completed', result };
     } catch (err) {
-      if (signal?.aborted || err?.code === 'TASK_TIMEOUT') {
+      if (signal?.aborted || err?.code === 'TASK_TIMEOUT' || err?.code === 'BACKGROUND_JOB_CANCELLED') {
         // Leave the execution record as running: the external side effect may have
         // completed even though its response was lost. The existing dangling-record
         // guard will require fresh approval before an EXTERNAL/HIGH_IMPACT retry.
-        const message = 'Execution was interrupted by the task deadline; external side-effect outcome may be uncertain.';
-        this._patchStep(taskId, step.id, { status: 'failed', attempts: (step.attempts ?? 0) + 1, error: message, ambiguousExecution: true });
-        this.activityLog.log({ type: 'tool_execution_interrupted', taskId, toolName: tool.name, detail: { idempotencyKey, executionId: record.executionId, reason: 'timeout' } });
-        return { status: 'failed', error: message, ambiguous: true };
+        const cancelled = signal?.reason?.code === 'BACKGROUND_JOB_CANCELLED' || err?.code === 'BACKGROUND_JOB_CANCELLED';
+        const message = cancelled
+          ? 'Execution was cancelled; external side-effect outcome may be uncertain.'
+          : 'Execution was interrupted by the task deadline; external side-effect outcome may be uncertain.';
+        this._patchStep(taskId, step.id, { status: cancelled ? 'cancelled' : 'failed', attempts: (step.attempts ?? 0) + 1, error: message, ambiguousExecution: true });
+        this.activityLog.log({ type: 'tool_execution_interrupted', taskId, toolName: tool.name, detail: { idempotencyKey, executionId: record.executionId, reason: cancelled ? 'cancelled' : 'timeout' } });
+        return { status: cancelled ? 'cancelled' : 'failed', error: message, ambiguous: true };
       }
       this.executionRecordStore.complete(record.executionId, { status: 'failed', error: err.message });
       if (err?.code === 'XOFT_VERIFICATION_REQUIRED') {
