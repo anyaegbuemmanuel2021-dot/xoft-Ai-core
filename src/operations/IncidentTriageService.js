@@ -52,6 +52,7 @@ export class IncidentTriageService {
     this.activityLog = activityLog;
     this.eventBus = eventBus;
     this.now = now;
+    this.inFlight = new Set();
     this.store = new JsonStore({ dataDir, fileName: 'incident-triage.json', kvKey: 'incident-triage', defaultValue: { attempts: [] }, sqliteStore });
   }
 
@@ -115,6 +116,8 @@ export class IncidentTriageService {
     const incident = this.incidentManager.get(incidentId);
     if (!incident) throw new Error('Incident not found');
     if (incident.status !== 'open') throw new Error('Only open incidents can be triaged; reopen or create a new incident if the failure recurs.');
+    if (this.inFlight.has(incidentId)) throw new Error('Incident triage is already running for this incident. Wait for the existing attempt to finish.');
+    this.inFlight.add(incidentId);
 
     const attempt = {
       id: crypto.randomUUID(), incidentId, status: 'running', createdAt: this.now().toISOString(),
@@ -206,6 +209,8 @@ export class IncidentTriageService {
       this._saveAttempt(attempt);
       try { this.incidentManager.capture(error, { source: 'incident_triage', severity: 'warning', correlationId: attempt.correlationId, context: { incidentId, attemptId: attempt.id } }); } catch { /* preserve the original triage error */ }
       throw error;
+    } finally {
+      this.inFlight.delete(incidentId);
     }
   }
 }
