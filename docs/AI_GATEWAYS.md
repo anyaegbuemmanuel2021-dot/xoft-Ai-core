@@ -1,14 +1,14 @@
-# Optional AI gateways: FreeLLMAPI and LiteLLM
+# Optional AI gateways: FreeLLMAPI, LiteLLM, and OpenRouter
 
-> **Xoft does not require FreeLLMAPI. Xoft does not require LiteLLM. Xoft does not require any single AI provider or any API key.**
-> Both gateways are OFF by default and are just two more independent providers inside the existing `ProviderRouter`.
+> **Xoft does not require FreeLLMAPI, LiteLLM, OpenRouter, or any single AI provider or API key.**
+ > FreeLLMAPI, LiteLLM, and OpenRouter are OFF by default and are independent providers inside the existing `ProviderRouter`.
 
 ```
                          XOFT  (orchestrator: tools, files, browser, PC, terminal, missions, self-editing — all stay in Xoft)
                            │
                      ProviderRouter  ── ModelHealthManager (health, cooldowns)
    ┌────────┬────────┬─────┴──┬────────┬──────────┬──────────┬───────────┐
- OpenAI  Gemini   Claude    Grok   Experiential  LiteLLM   FreeLLMAPI   Ollama
+ OpenAI  Gemini   Claude    Grok   Experiential  OpenRouter  LiteLLM   FreeLLMAPI   Ollama
    (independent peers — there is no chain and no provider needs another)        (local, optional)
 ```
 
@@ -77,7 +77,7 @@ A successful **Test connection** or saving new settings clears the cooldown imme
 ## Routing and fallback
 
 Order is configurable and nothing is permanently "best". By default gateways rank **after** the direct providers and **before** local Ollama,
-so enabling one never changes which direct provider answers. To prefer a gateway:
+so enabling one never changes which direct provider answers. To pin a provider and define fallbacks (otherwise XOFT keeps task-aware routing):
 
 ```
 AI_PRIMARY_PROVIDER=openai
