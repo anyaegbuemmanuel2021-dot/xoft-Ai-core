@@ -15,6 +15,7 @@ import { aiErrorToHttp } from './providers/errors.js';
 import { validateModelChoice } from './providers/modelCatalog.js';
 import * as privacyClassifier from './privacy/PrivacyClassifier.js';
 import { MissionScheduler } from './scheduler/MissionScheduler.js';
+import { ReminderScheduler } from './scheduler/ReminderScheduler.js';
 import { MissionAutopilot } from './scheduler/MissionAutopilot.js';
 import { Watchdog } from './watchdog/Watchdog.js';
 import { EngineRegistry } from './engines/EngineRegistry.js';
@@ -245,6 +246,8 @@ const memoryRetentionManager = new MemoryRetentionManager();
 const knowledgeGraph = new KnowledgeGraph({ dataDir: config.memory.dataDir, sqliteStore: durableStore });
 const backgroundJobManager = new BackgroundJobManager({ toolRegistry, taskPlanner, activityLog, eventBus, memory, incidentManager, dataDir: config.memory.dataDir, sqliteStore: durableStore });
 backgroundJobManager.loadAndSchedule();
+const reminderScheduler = new ReminderScheduler({ dataDir: config.memory.dataDir, sqliteStore: durableStore, activityLog, eventBus });
+reminderScheduler.start();
 const workflowEngine = new WorkflowEngine({ toolRegistry, activityLog, eventBus, memory, dataDir: config.memory.dataDir, sqliteStore: durableStore });
 workflowEngine.reattachListeners();
 const automationFactory = new AutomationFactory({ router, toolRegistry, rulesEngine, workflowEngine, activityLog });
@@ -1883,6 +1886,19 @@ app.post('/api/task-schedules', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/task-schedules', requireAdmin, (_req, res) => res.json(backgroundJobManager.list().filter(j => j.kind === 'task')));
+app.get('/api/reminders', requireAdmin, (_req, res) => res.json(reminderScheduler.list()));
+app.post('/api/reminders', requireAdmin, (req, res) => {
+  try { return res.status(201).json(reminderScheduler.create(req.body ?? {})); }
+  catch (err) { return res.status(400).json({ error: err.message }); }
+});
+app.post('/api/reminders/:id/acknowledge', requireAdmin, (req, res) => {
+  try { return res.json(reminderScheduler.acknowledge(req.params.id)); }
+  catch (err) { return res.status(404).json({ error: err.message }); }
+});
+app.post('/api/reminders/:id/cancel', requireAdmin, (req, res) => {
+  try { return res.json(reminderScheduler.cancel(req.params.id)); }
+  catch (err) { return res.status(404).json({ error: err.message }); }
+});
 
 app.get('/api/jobs', requireAdmin, (_req, res) => res.json(backgroundJobManager.list()));
 app.post('/api/jobs/:id/pause', requireAdmin, (req, res) => res.json(backgroundJobManager.pause(req.params.id)));
@@ -2201,6 +2217,7 @@ const shutdown = (signal) => {
   systemWatchdog?.stop();
   killSwitch?.stop();
   socialHandleManager?.stop();
+  reminderScheduler?.stop();
   socialMediaScheduler?.stop();
   // Detach from engine tasks (they are recovered on next start) and stop any Hermes process Xoft itself started.
   Promise.resolve(engineTaskManager?.shutdown()).then(() => engineRegistry?.shutdown()).catch(() => {});
