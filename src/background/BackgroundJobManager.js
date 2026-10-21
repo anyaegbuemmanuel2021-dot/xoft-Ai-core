@@ -65,7 +65,9 @@ export class BackgroundJobManager {
   async _run(jobId){
     const job=this._load().jobs.find(j=>j.id===jobId);
     if(!job||job.status==='cancelled'||job.status==='paused')return;
-    this._patch(jobId,j=>{j.status='running';j.startedAt=new Date().toISOString();j.updatedAt=j.startedAt;});
+    // Stable across retries/recovery of one scheduled execution, unique for each recurring run.
+    const executionIdempotencyKey = job.executionIdempotencyKey || `${job.id}:${job.runAt ?? job.createdAt}`;
+    this._patch(jobId,j=>{j.status='running';j.executionIdempotencyKey=executionIdempotencyKey;j.startedAt=new Date().toISOString();j.updatedAt=j.startedAt;});
     try {
       let result;
       if(job.kind==='task') {
@@ -81,7 +83,7 @@ export class BackgroundJobManager {
         let timeoutError = null;
         const work = this.toolRegistry.execute(job.toolName, job.input, {
           memory: this.memory, taskId: job.taskId, source: 'background_job',
-          signal: controller.signal, idempotencyKey: job.id, correlationId: job.correlationId, deadlineAt,
+          signal: controller.signal, idempotencyKey: executionIdempotencyKey, correlationId: job.correlationId, deadlineAt,
         });
         const timeout = new Promise((_, reject) => {
           timeoutHandle = setTimeout(() => {
@@ -104,7 +106,7 @@ export class BackgroundJobManager {
       const failed=job.kind==='task' && result?.status==='failed';
       if(failed) throw new Error(`Scheduled task failed: ${result.steps?.find(s=>s.status==='failed')?.error || 'unknown task failure'}`);
       const nextRun=job.kind==='recurring'?new Date(Date.now()+job.intervalMs).toISOString():null;
-      this._patch(jobId,j=>{j.status=job.kind==='recurring'?'scheduled':'completed';j.lastRunAt=new Date().toISOString();j.finishedAt=j.lastRunAt;j.updatedAt=j.lastRunAt;j.lastResult=result;j.lastError=null;j.attempts=0;j.runAt=nextRun;});
+      this._patch(jobId,j=>{j.status=job.kind==='recurring'?'scheduled':'completed';j.lastRunAt=new Date().toISOString();j.finishedAt=j.lastRunAt;j.updatedAt=j.lastRunAt;j.lastResult=result;j.lastError=null;j.attempts=0;j.executionIdempotencyKey=job.kind==='recurring'?null:executionIdempotencyKey;j.runAt=nextRun;});
       this.activityLog.log({type:'background_job_ran',detail:{jobId,kind:job.kind,toolName:job.toolName,taskId:job.taskId,result}});
       if(job.kind==='recurring') this._arm(this.get(jobId)); else {this._clearTimer(jobId);this.eventBus?.emitEvent(EventType.TASK_COMPLETED,{jobId,toolName:job.toolName,taskId:job.taskId});}
     } catch(err) {
@@ -117,7 +119,7 @@ export class BackgroundJobManager {
           source: timedOut ? 'background_job_timeout' : 'background_job',
           severity: timedOut || attempts > MAX_JOB_RETRIES ? 'error' : 'warning',
           correlationId: job.correlationId,
-          context: { jobId, kind: job.kind, toolName: job.toolName, taskId: job.taskId, attempt: attempts, maxRunMs: job.kind === 'task' ? this.taskPlanner?.maxDurationMs ?? null : job.maxRunMs, idempotencyKey: job.id },
+          context: { jobId, kind: job.kind, toolName: job.toolName, taskId: job.taskId, attempt: attempts, maxRunMs: job.kind === 'task' ? this.taskPlanner?.maxDurationMs ?? null : job.maxRunMs, idempotencyKey: executionIdempotencyKey },
         }) ?? null;
       } catch { /* a telemetry failure must not stop bounded retry handling */ }
       this.activityLog.log({type:timedOut?'background_job_timed_out':'background_job_failed',detail:{jobId,toolName:job.toolName,taskId:job.taskId,attempt:attempts,error:safeError,incidentId:incident?.id ?? null,correlationId:job.correlationId}});
