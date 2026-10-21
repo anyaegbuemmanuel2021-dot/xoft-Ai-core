@@ -34,6 +34,34 @@ describe('ChannelGateway — normalizes every inbound channel to one shape', () 
     assert.equal(new Set(calls.map(() => executiveBrain.handle)).size, 1);
   });
 
+
+  test('handleStream preserves channel/session metadata on the final event and forwards cancellation', async () => {
+    const logged = [];
+    const received = [];
+    const executiveBrain = {
+      async *handleStream(sessionId, message, options) {
+        received.push({ sessionId, message, signal: options.signal });
+        yield { type: 'text', delta: 'first' };
+        yield { type: 'done', result: { reply: 'first chunk', action: 'chat' } };
+      },
+    };
+    const gateway = new ChannelGateway({ executiveBrain, activityLog: { log: (entry) => logged.push(entry) } });
+    const controller = new AbortController();
+    const events = [];
+    for await (const event of gateway.handleStream(
+      { channel: 'web', userId: 'user-a', sessionId: 'session-a', message: 'hello' },
+      { signal: controller.signal },
+    )) events.push(event);
+
+    assert.equal(received[0].signal, controller.signal);
+    assert.deepEqual(events.map((event) => event.type), ['text', 'done']);
+    assert.equal(events.at(-1).result.channel, 'web');
+    assert.equal(events.at(-1).result.sessionId, 'session-a');
+    assert.equal(events.at(-1).result.reply, 'first chunk');
+    assert.equal(logged.at(-1).type, 'channel_request');
+    assert.equal(logged.at(-1).detail.streamed, true);
+  });
+
   test('handle() returns the channel and sessionId alongside the brain result, and logs the request', async () => {
     const logged = [];
     const activityLog = { log: (e) => logged.push(e) };
