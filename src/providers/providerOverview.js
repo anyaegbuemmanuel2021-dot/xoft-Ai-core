@@ -13,6 +13,7 @@ export const PROVIDER_META = [
   { id: 'experiential', label: 'Experiential Labs' },
   { id: 'freellmapi', label: 'FreeLLMAPI' },
   { id: 'litellm', label: 'LiteLLM' },
+  { id: 'openrouter', label: 'OpenRouter (free models)' },
 ];
 
 function modelFor(id, router, config) {
@@ -28,6 +29,7 @@ function modelFor(id, router, config) {
     }
     case 'freellmapi': return router.getInstance?.('freellmapi')?.getModel?.() ?? p.freellmapi?.model ?? null;
     case 'litellm': return router.getInstance?.('litellm')?.getModel?.() ?? p.litellm?.model ?? null;
+    case 'openrouter': return router.getInstance?.('openrouter')?.getModel?.() ?? p.openrouter?.model ?? null;
     default: return null;
   }
 }
@@ -45,7 +47,7 @@ export async function buildProviderOverview({ router, modelHealth, config }) {
     let status = configured ? stats.status : 'NOT_CONFIGURED';
     // Optional gateways report their richer state (disabled/unconfigured/authentication_error/cooldown…) from the same health data.
     let state = null;
-    if ((id === 'freellmapi' || id === 'litellm') && typeof router.gatewayStatus === 'function') {
+    if ((id === 'freellmapi' || id === 'litellm' || id === 'openrouter') && typeof router.gatewayStatus === 'function') {
       const g = router.gatewayStatus(id);
       state = g.state;
       // Map the richer gateway state onto the SAME status vocabulary every consumer (Watchdog, dashboard, missions) already understands.
