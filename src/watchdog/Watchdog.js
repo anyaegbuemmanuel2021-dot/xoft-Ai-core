@@ -10,15 +10,15 @@ const worst = (a, b) => (ORDER.indexOf(a) >= ORDER.indexOf(b) ? a : b);
 const byPct = (pct, warn, crit) => (pct === null || pct === undefined ? 'DEGRADED' : pct >= crit ? 'CRITICAL' : pct >= warn ? 'WARNING' : 'HEALTHY');
 
 export class Watchdog {
-  constructor({ telemetry, providerOverview, missionManager, emergencyStop, realtime, taskQueueStatus, runtimeHealth, engineStatus, activityLog, eventBus, thresholds = {} } = {}) {
+  constructor({ telemetry, providerOverview, missionManager, emergencyStop, realtime, taskQueueStatus, runtimeHealth, engineStatus, activityLog, eventBus, incidentManager = null, thresholds = {} } = {}) {
     this.t = telemetry; this.providerOverview = providerOverview; this.missions = missionManager;
     this.emergencyStop = emergencyStop; this.realtime = realtime; this.engineStatus = engineStatus; this.taskQueueStatus = taskQueueStatus; this.runtimeHealth = runtimeHealth;
-    this.activityLog = activityLog; this.eventBus = eventBus;
+    this.activityLog = activityLog; this.eventBus = eventBus; this.incidentManager = incidentManager;
     this.th = { memWarn: 90, memCrit: 97, diskWarn: 90, diskCrit: 98, cpuWarn: 90, ...thresholds };
     this._timer = null;
   }
 
-  async diagnose() {
+  _captureError(error, source, context = {}) {\n    try { this.incidentManager?.capture(error, { source, severity: 'warning', context }); } catch { /* diagnostics must remain available even if incident storage fails */ }\n  }\n\n  async diagnose() {
     const checks = [];
     const add = (name, level, detail) => checks.push({ name, level, detail });
     try {
@@ -26,7 +26,7 @@ export class Watchdog {
       add('memory', byPct(s.memory?.usedPercent, this.th.memWarn, this.th.memCrit), `${s.memory?.usedPercent ?? '?'}% used`);
       add('disk', s.storage ? byPct(s.storage.usedPercent, this.th.diskWarn, this.th.diskCrit) : 'DEGRADED', s.storage ? `${s.storage.usedPercent}% used` : 'disk usage not readable on this platform');
       add('cpu', s.cpu?.percent === null || s.cpu?.percent === undefined ? 'DEGRADED' : s.cpu.percent >= this.th.cpuWarn ? 'WARNING' : 'HEALTHY', s.cpu?.percent === null || s.cpu?.percent === undefined ? 'no sample yet' : `${s.cpu.percent}%`);
-    } catch (err) { add('system', 'WARNING', `telemetry failed: ${err.message}`); }
+    } catch (err) { this._captureError(err, 'watchdog.telemetry'); add('system', 'WARNING', `telemetry failed: ${this.incidentManager?.redact(err.message) ?? err.message}`); }
 
     try {
       const provs = (await this.providerOverview()).filter((p) => p.configured);
@@ -36,7 +36,7 @@ export class Watchdog {
       else if (bad.length === provs.length) add('providers', 'CRITICAL', `all ${provs.length} configured provider(s) unavailable`);
       else if (bad.length || soft.length) add('providers', 'DEGRADED', `${bad.length} down, ${soft.length} degraded of ${provs.length}`);
       else add('providers', 'HEALTHY', `${provs.length} configured, none reporting failures`);
-    } catch (err) { add('providers', 'WARNING', `provider check failed: ${err.message}`); }
+    } catch (err) { this._captureError(err, 'watchdog.providers'); add('providers', 'WARNING', `provider check failed: ${this.incidentManager?.redact(err.message) ?? err.message}`); }
 
     const rt = this.realtime?.();
     add('websocket', rt?.available ? 'HEALTHY' : 'DEGRADED', rt?.available ? `${rt.clients} client(s)` : 'realtime bridge not running (REST still works)');
@@ -46,12 +46,12 @@ export class Watchdog {
       const paused = ms.filter((m) => m.status === 'paused');
       const stuck = ms.filter((m) => !['cancelled', 'paused', 'completed'].includes(m.status) && this.missions.isStuck(m));
       add('missions', stuck.length ? 'WARNING' : paused.length ? 'DEGRADED' : 'HEALTHY', `${ms.length} total, ${paused.length} paused, ${stuck.length} stuck`);
-    } catch (err) { add('missions', 'WARNING', err.message); }
+    } catch (err) { this._captureError(err, 'watchdog.missions'); add('missions', 'WARNING', this.incidentManager?.redact(err.message) ?? err.message); }
 
     try {
       const q = this.taskQueueStatus?.();
       if (q) add('task_queue', 'HEALTHY', `${q.running?.length ?? 0} running, ${q.pending?.length ?? 0} pending`);
-    } catch (err) { add('task_queue', 'WARNING', err.message); }
+    } catch (err) { this._captureError(err, 'watchdog.task_queue'); add('task_queue', 'WARNING', this.incidentManager?.redact(err.message) ?? err.message); }
 
     // Execution engines (Xoft Core, Hermes, …): an offline optional engine is DEGRADED at worst — never CRITICAL — because
     // tasks fall back to another compatible engine. Only "no engine can run anything" is a WARNING.
@@ -64,7 +64,7 @@ export class Watchdog {
         else if (down.length) add('engines', 'DEGRADED', `${usable.length} available; ${down.map((e) => `${e.name}: ${e.health?.level ?? e.status}`).join(', ')} (tasks fall back automatically)`);
         else add('engines', 'HEALTHY', `${usable.length} engine(s) available: ${usable.map((e) => e.name).join(', ')}`);
       }
-    } catch (err) { add('engines', 'WARNING', `engine check failed: ${err.message}`); }
+    } catch (err) { this._captureError(err, 'watchdog.engines'); add('engines', 'WARNING', `engine check failed: ${this.incidentManager?.redact(err.message) ?? err.message}`); }
 
     // Device Runtime (pc-agent): reads what each agent last REPORTED — no fabricated health.
     try {
@@ -81,7 +81,7 @@ export class Watchdog {
         }
         add('device_runtime', level, parts.join('; '));
       }
-    } catch (err) { add('device_runtime', 'WARNING', `runtime health check failed: ${err.message}`); }
+    } catch (err) { this._captureError(err, 'watchdog.device_runtime'); add('device_runtime', 'WARNING', `runtime health check failed: ${this.incidentManager?.redact(err.message) ?? err.message}`); }
 
     if (this.emergencyStop?.isActive?.()) add('emergency_stop', 'WARNING', 'emergency stop is ACTIVE — autonomous work is blocked');
 
@@ -109,7 +109,7 @@ export class Watchdog {
 
   start(intervalMs = 30000) {
     if (this._timer) return;
-    this._timer = setInterval(() => { this.tick().catch(() => { /* a watchdog error must never crash the server */ }); }, intervalMs);
+    this._timer = setInterval(() => { this.tick().catch((err) => { this._captureError(err, 'watchdog.tick'); /* a watchdog error must never crash the server */ }); }, intervalMs);
     this._timer.unref?.();
   }
   stop() { clearInterval(this._timer); this._timer = null; }
