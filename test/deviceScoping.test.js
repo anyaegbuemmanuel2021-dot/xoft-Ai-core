@@ -12,7 +12,7 @@ const ADMIN_KEY = 'admin-secret-key';
 
 async function freePort() {
   const server = net.createServer();
-  await new Promise((resolve, reject) => server.listen(0, '127.0.0.1', (err) => err ? reject(err) : resolve()));
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const { port } = server.address();
   await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
   return port;
