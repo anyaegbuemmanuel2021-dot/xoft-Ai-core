@@ -338,7 +338,7 @@ export class TaskPlanner {
       this.eventBus?.emitEvent(EventType.EXECUTION_AMBIGUOUS, { taskId, stepId: step.id, toolName: tool.name, idempotencyKey });
     }
 
-    return this._executeStep(taskId, step, tool);
+    return this._executeStep(taskId, step, tool, { signal });
   }
 
   async _executeStep(taskId, step, tool, { signal } = {}) {
@@ -445,7 +445,7 @@ export class TaskPlanner {
           await this.memory?.remember?.('execution_failure', `Task ${taskId}, tool ${tool.name} failed on attempt ${attempts}: ${err.message}`, { taskId, toolName: tool.name, error: err.message, attempt: attempts }, { source: 'SYSTEM_OBSERVED', confidence: 1, relatedTaskId: taskId });
         } catch { /* learning must never break execution */ }
         this._patchStep(taskId, step.id, { status: 'pending', attempts, error: err.message });
-        const retryResult = await this._executeStep(taskId, { ...step, attempts }, tool);
+        const retryResult = await this._executeStep(taskId, { ...step, attempts }, tool, { signal });
         if (recovery && recovery.strategy !== 'abort') {
           this._recordExperience({
             toolName: tool.name,
