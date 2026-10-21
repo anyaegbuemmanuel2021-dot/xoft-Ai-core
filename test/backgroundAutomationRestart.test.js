@@ -188,6 +188,27 @@ describe('BackgroundJobManager — incidents and interrupted-job recovery', () =
     } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
   });
 
+  test('scheduled task runtime budget is passed through to TaskPlanner', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-task-job-budget-'));
+    const activityLog = new ActivityLog({ dataDir });
+    const eventBus = new EventBus({ activityLog });
+    const toolRegistry = new ToolRegistry({ defaultDeviceId: 'local' });
+    let receivedBudget = null;
+    const taskPlanner = {
+      maxDurationMs: 10000,
+      async plan(goal) { return { id: 'task-budget-1', goal }; },
+      async execute(taskId, options) { receivedBudget = options.maxDurationMs; return { id: taskId, status: 'completed', steps: [] }; },
+    };
+    const manager = new BackgroundJobManager({ toolRegistry, taskPlanner, activityLog, eventBus, memory: null, dataDir });
+    try {
+      const job = await manager.scheduleTask({ goal: 'run a bounded task', delayMs: 0, maxRunMs: 2000 });
+      await sleep(50);
+      assert.equal(job.maxRunMs, 2000);
+      assert.equal(receivedBudget, 2000);
+      assert.equal(manager.get(job.id).status, 'completed');
+    } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
+  });
+
   test('a tool job timeout aborts the tool signal, records an incident, and is not retried blindly', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-job-timeout-'));
     const activityLog = new ActivityLog({ dataDir });
