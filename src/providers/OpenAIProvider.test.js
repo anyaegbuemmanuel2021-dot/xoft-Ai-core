@@ -119,3 +119,23 @@ test('OpenAIProvider.stream accepts [DONE] as a terminal marker when finish_reas
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test('OpenAIProvider.stream accepts a final text delta carrying finish_reason in the same SSE event', async () => {
+  const provider = new OpenAIProvider();
+  provider.isConfigured = () => true;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    'data: {"choices":[{"delta":{"content":"complete answer"},"finish_reason":"stop"}]}\\n\\n',
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+  try {
+    const events = [];
+    for await (const event of provider.stream({ messages: [] })) events.push(event);
+    assert.deepEqual(events.map((event) => event.type), ['text', 'done']);
+    assert.equal(events[0].delta, 'complete answer');
+    assert.equal(events[1].result.text, 'complete answer');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
