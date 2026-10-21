@@ -741,8 +741,7 @@ app.post('/api/social/handles/:id/autonomy', requireAdmin, async (req, res) => {
   if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot enable social autopilot.' });
   try {
     const enabled = req.body?.enabled === true;
-    if (enabled) await socialHandleManager.validateTools(req.params.id);
-    const item = socialHandleManager.setAutonomy(req.params.id, enabled, { confirmedBy: req.body?.confirmedBy });
+    const item = await socialHandleManager.setAutonomy(req.params.id, enabled, { confirmedBy: req.body?.confirmedBy });
     if (!item) return res.status(404).json({ error: 'Social handle not found' });
     return res.json(item);
   } catch (err) { return res.status(400).json({ error: err.message }); }
