@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the optional OpenAI-compatible gateways (FreeLLMAPI, LiteLLM).
+ * Pure helpers for the optional OpenAI-compatible gateways (FreeLLMAPI, LiteLLM, OpenRouter).
  * No imports from config/ (config imports THIS module), and nothing here ever throws on bad input:
  * a missing or malformed setting is a provider-level *state*, never an application-level fatal error.
  */
