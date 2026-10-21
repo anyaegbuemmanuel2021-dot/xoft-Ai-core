@@ -1,15 +1,32 @@
-import { test, describe, after } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 /** Spawns the real src/index.js as a child process on a scratch data dir/port, waits until it answers, and returns a cleanup fn. */
-async function bootServer(env, port) {
+async function freePort() {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const port = 32000 + ((process.pid + attempt) % 200);
+    const server = net.createServer();
+    try {
+      await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
+      await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+      return port;
+    } catch (error) {
+      if (error?.code !== 'EADDRINUSE' && error?.code !== 'EACCES') throw error;
+    }
+  }
+  throw new Error('Could not reserve a free API auth test port.');
+}
+
+async function bootServer(env, port = null) {
+  port = port ?? await freePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-auth-test-'));
   const child = spawn(process.execPath, [path.join(ROOT, 'src', 'index.js')], {
     cwd: ROOT,
@@ -32,61 +49,73 @@ async function bootServer(env, port) {
   }
 
   return {
-    stop: () => child.kill(),
+    port,
+    stop: async () => {
+      if (child.exitCode === null) {
+        child.kill();
+        await new Promise((resolve) => {
+          if (child.exitCode !== null) return resolve();
+          child.once('exit', resolve);
+          const fallback = setTimeout(resolve, 2000);
+          fallback.unref?.();
+        });
+      }
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    },
   };
 }
 
 describe('API authentication (real server, integration)', { concurrency: false }, () => {
   test('with no AUTH_API_KEYS set, the API stays open (backward compatible)', async () => {
-    const server = await bootServer({}, 3101);
+    const server = await bootServer({});
     try {
-      const res = await fetch('http://localhost:3101/api/status');
+      const res = await fetch(`http://localhost:${server.port}/api/status`);
       assert.equal(res.status, 200);
     } finally {
-      server.stop();
+      await server.stop();
     }
   });
 
   test('with AUTH_API_KEYS set, requests without a key are rejected', async () => {
-    const server = await bootServer({ AUTH_API_KEYS: 'secretA,secretB' }, 3102);
+    const server = await bootServer({ AUTH_API_KEYS: 'secretA,secretB' });
     try {
-      const res = await fetch('http://localhost:3102/api/status');
+      const res = await fetch(`http://localhost:${server.port}/api/status`);
       assert.equal(res.status, 401);
     } finally {
-      server.stop();
+      await server.stop();
     }
   });
 
   test('with AUTH_API_KEYS set, a wrong key is rejected and either configured key is accepted', async () => {
-    const server = await bootServer({ AUTH_API_KEYS: 'secretA,secretB' }, 3103);
+    const server = await bootServer({ AUTH_API_KEYS: 'secretA,secretB' });
     try {
-      const wrong = await fetch('http://localhost:3103/api/status', { headers: { 'X-API-Key': 'nope' } });
+      const wrong = await fetch(`http://localhost:${server.port}/api/status`, { headers: { 'X-API-Key': 'nope' } });
       assert.equal(wrong.status, 401);
 
-      const first = await fetch('http://localhost:3103/api/status', { headers: { 'X-API-Key': 'secretA' } });
+      const first = await fetch(`http://localhost:${server.port}/api/status`, { headers: { 'X-API-Key': 'secretA' } });
       assert.equal(first.status, 200);
 
-      const second = await fetch('http://localhost:3103/api/status', { headers: { Authorization: 'Bearer secretB' } });
+      const second = await fetch(`http://localhost:${server.port}/api/status`, { headers: { Authorization: 'Bearer secretB' } });
       assert.equal(second.status, 200);
     } finally {
-      server.stop();
+      await server.stop();
     }
   });
 
   test('device pairing routes are covered by auth too, not just /api/status', async () => {
-    const server = await bootServer({ AUTH_API_KEYS: 'secretA' }, 3104);
+    const server = await bootServer({ AUTH_API_KEYS: 'secretA' });
     try {
-      const res = await fetch('http://localhost:3104/api/devices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'x', platform: 'desktop' }) });
+      const res = await fetch(`http://localhost:${server.port}/api/devices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'x', platform: 'desktop' }) });
       assert.equal(res.status, 401);
 
-      const authed = await fetch('http://localhost:3104/api/devices', {
+      const authed = await fetch(`http://localhost:${server.port}/api/devices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': 'secretA' },
         body: JSON.stringify({ name: 'x', platform: 'desktop' }),
       });
       assert.equal(authed.status, 200);
     } finally {
-      server.stop();
+      await server.stop();
     }
   });
 });
