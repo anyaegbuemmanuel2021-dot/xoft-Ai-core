@@ -1861,7 +1861,7 @@ app.get('/api/knowledge-graph/nodes/:id/traverse', (req, res) => {
 app.get('/api/knowledge-graph/stats', (_req, res) => res.json(knowledgeGraph.stats()));
 
 // --- Background jobs (general scheduler, distinct from monitors/rules) ---
-app.post('/api/jobs', (req, res) => {
+app.post('/api/jobs', requireAdmin, (req, res) => {
   const { toolName, input, delayMs, intervalMs, maxRunMs } = req.body ?? {};
   if (!toolName) return res.status(400).json({ error: 'toolName is required' });
   try {
@@ -1874,7 +1874,7 @@ app.post('/api/jobs', (req, res) => {
   }
 });
 
-app.post('/api/task-schedules', async (req, res) => {
+app.post('/api/task-schedules', requireAdmin, async (req, res) => {
   const { goal, executeAt, delayMs, autonomyLevel, maxRunMs } = req.body ?? {};
   if (!goal) return res.status(400).json({ error: 'goal is required' });
   try {
@@ -1882,12 +1882,12 @@ app.post('/api/task-schedules', async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
-app.get('/api/task-schedules', (_req, res) => res.json(backgroundJobManager.list().filter(j => j.kind === 'task')));
+app.get('/api/task-schedules', requireAdmin, (_req, res) => res.json(backgroundJobManager.list().filter(j => j.kind === 'task')));
 
-app.get('/api/jobs', (_req, res) => res.json(backgroundJobManager.list()));
-app.post('/api/jobs/:id/pause', (req, res) => res.json(backgroundJobManager.pause(req.params.id)));
-app.post('/api/jobs/:id/resume', (req, res) => res.json(backgroundJobManager.resume(req.params.id)));
-app.post('/api/jobs/:id/cancel', (req, res) => res.json(backgroundJobManager.cancel(req.params.id)));
+app.get('/api/jobs', requireAdmin, (_req, res) => res.json(backgroundJobManager.list()));
+app.post('/api/jobs/:id/pause', requireAdmin, (req, res) => res.json(backgroundJobManager.pause(req.params.id)));
+app.post('/api/jobs/:id/resume', requireAdmin, (req, res) => res.json(backgroundJobManager.resume(req.params.id)));
+app.post('/api/jobs/:id/cancel', requireAdmin, (req, res) => res.json(backgroundJobManager.cancel(req.params.id)));
 
 // --- Workflow engine (fixed cross-agent chains triggered by real events) ---
 app.post('/api/workflows', (req, res) => {
