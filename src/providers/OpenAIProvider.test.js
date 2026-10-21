@@ -88,7 +88,7 @@ test('OpenAIProvider.stream rejects truncated SSE even when partial text was rec
   provider.isConfigured = () => true;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(
-    'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}\\n\\n',
+    'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}\n\n',
     { status: 200, headers: { 'content-type': 'text/event-stream' } },
   );
   try {
@@ -107,7 +107,7 @@ test('OpenAIProvider.stream accepts [DONE] as a terminal marker when finish_reas
   provider.isConfigured = () => true;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(
-    'data: {"choices":[{"delta":{"content":"complete"},"finish_reason":null}]}\\n\\ndata: [DONE]\\n\\n',
+    'data: {"choices":[{"delta":{"content":"complete"},"finish_reason":null}]}\n\ndata: [DONE]\n\n',
     { status: 200, headers: { 'content-type': 'text/event-stream' } },
   );
   try {
