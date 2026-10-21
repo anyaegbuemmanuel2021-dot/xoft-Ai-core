@@ -218,7 +218,8 @@ describe('BackgroundJobManager — incidents and interrupted-job recovery', () =
       assert.match(stored.lastError, /external side effects may be uncertain/);
       assert.equal(calls, 1, 'timed-out work must not be automatically retried');
       assert.equal(receivedContext.signal.aborted, true);
-      assert.equal(receivedContext.idempotencyKey, job.id);
+      assert.equal(receivedContext.idempotencyKey, stored.executionIdempotencyKey);
+      assert.ok(receivedContext.idempotencyKey.startsWith(job.id + ':'));
       assert.equal(receivedContext.correlationId, job.correlationId);
       assert.equal(incidentManager.summary().errors, 1);
       await sleep(50);
