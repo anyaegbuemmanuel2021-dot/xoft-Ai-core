@@ -135,7 +135,7 @@ const injectionGuard = new PromptInjectionGuard({ activityLog });
 const connectorManager = new ConnectorManager({ definitions: config.connectors.definitions, activityLog });
 const socialMediaScheduler = new SocialMediaScheduler({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, activityLog });
 const socialEngagementManager = new SocialEngagementManager({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, activityLog });
-const socialHandleManager = new SocialHandleManager({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, socialMediaScheduler, router, activityLog });
+const socialHandleManager = new SocialHandleManager({ dataDir: config.memory.dataDir, sqliteStore: durableStore, connectorManager, socialMediaScheduler, router, activityLog, injectionGuard });
 const whatsappService = new WhatsAppService();
 const whatsappInbox = new WhatsAppInboxStore({ dataDir: config.memory.dataDir });
 const twilioService = new TwilioService();
@@ -741,8 +741,7 @@ app.post('/api/social/handles/:id/autonomy', requireAdmin, async (req, res) => {
   if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot enable social autopilot.' });
   try {
     const enabled = req.body?.enabled === true;
-    if (enabled) await socialHandleManager.validateTools(req.params.id);
-    const item = socialHandleManager.setAutonomy(req.params.id, enabled, { confirmedBy: req.body?.confirmedBy });
+    const item = await socialHandleManager.setAutonomy(req.params.id, enabled, { confirmedBy: req.body?.confirmedBy });
     if (!item) return res.status(404).json({ error: 'Social handle not found' });
     return res.json(item);
   } catch (err) { return res.status(400).json({ error: err.message }); }
