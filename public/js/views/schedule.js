@@ -7,6 +7,8 @@ export let cleanup = null;
 let viewGeneration = 0;
 let refreshTimer = null;
 let currentJobs = [];
+let currentReminders = [];
+const REMINDER_NOTIFIED_KEY = 'xoft_notified_reminders_v1';
 
 const BUDGETS = [
   [60_000, '1 minute'],
@@ -88,6 +90,79 @@ async function fetchJobs() {
   return Array.isArray(result) ? result : (result?.jobs ?? []);
 }
 
+function reminderStatusBadge(status) {
+  const kind = { scheduled: 'warn', due: 'err', acknowledged: 'ok', cancelled: '' }[status] ?? '';
+  return badge(status || 'unknown', kind);
+}
+
+function reminderRow(reminder) {
+  const actions = [];
+  if (['scheduled','due'].includes(reminder.status)) {
+    actions.push(`<button data-reminder-action="acknowledge" data-reminder-id="${esc(reminder.id)}" class="primary">Acknowledge</button>`);
+    actions.push(`<button data-reminder-action="cancel" data-reminder-id="${esc(reminder.id)}" class="danger">Cancel</button>`);
+  }
+  return `
+    <div class="row" style="flex-direction:column;align-items:stretch;gap:8px;">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+        <div style="min-width:0;flex:1;"><div class="main">${esc(reminder.title)}</div><div class="muted">Due ${esc(fmtTime(reminder.dueAt))}</div></div>
+        ${reminderStatusBadge(reminder.status)}
+      </div>
+      ${reminder.note ? `<div class="muted">${esc(reminder.note)}</div>` : ''}
+      ${reminder.firedAt ? `<div class="muted">Marked due ${esc(fmtTime(reminder.firedAt))}</div>` : ''}
+      ${actions.length ? `<div class="inline" style="gap:6px;flex-wrap:wrap;">${actions.join('')}</div>` : ''}
+    </div>`;
+}
+
+function remindersHtml(reminders) {
+  const sorted = [...(Array.isArray(reminders) ? reminders : [])].sort((a, b) => {
+    const aTime = Date.parse(a.dueAt || 0) || 0;
+    const bTime = Date.parse(b.dueAt || 0) || 0;
+    return aTime - bTime;
+  });
+  return rows(sorted, reminderRow, 'No reminders yet.');
+}
+
+function notifyDue(reminders) {
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem(REMINDER_NOTIFIED_KEY) || '[]'); } catch { seen = []; }
+  const seenIds = new Set(Array.isArray(seen) ? seen : []);
+  for (const reminder of reminders ?? []) {
+    if (reminder.status !== 'due' || seenIds.has(reminder.id)) continue;
+    toast(`Reminder: ${reminder.title}`, 'warn');
+    try {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('XOFT reminder', { body: reminder.note ? `${reminder.title} — ${reminder.note}` : reminder.title });
+      }
+    } catch { /* browser notification support is optional; the dashboard toast remains */ }
+    seenIds.add(reminder.id);
+  }
+  try { localStorage.setItem(REMINDER_NOTIFIED_KEY, JSON.stringify([...seenIds].slice(-100))); } catch { /* best-effort deduplication */ }
+}
+
+async function fetchReminders() {
+  const result = await api.get('/api/reminders');
+  return Array.isArray(result) ? result : (result?.reminders ?? []);
+}
+
+async function refreshReminders(container, generation) {
+  if (generation !== viewGeneration || !container.isConnected) return;
+  const list = container.querySelector('#schedule-reminder-list');
+  if (!list) return;
+  try {
+    const reminders = await fetchReminders();
+    if (generation === viewGeneration && container.isConnected) {
+      currentReminders = reminders;
+      list.innerHTML = remindersHtml(reminders);
+      notifyDue(reminders);
+    }
+  } catch (error) {
+    if (generation === viewGeneration && container.isConnected) {
+      list.innerHTML = `<div class="empty">Could not refresh reminders: ${esc(error.message)} <button data-reminder-action="refresh">Retry</button></div>`;
+    }
+  }
+}
+
+
 async function refreshJobs(container, generation) {
   if (generation !== viewGeneration || !container.isConnected) return;
   const list = container.querySelector('#schedule-job-list');
@@ -111,17 +186,20 @@ export async function render(container) {
   const isCurrent = () => generation === viewGeneration && container.isConnected;
   let jobs = [];
   let tools = [];
+  let reminders = [];
   let loadError = '';
   try {
-    const [jobResult, toolResult] = await Promise.all([api.get('/api/jobs'), api.get('/api/tools')]);
+    const [jobResult, toolResult, reminderResult] = await Promise.all([api.get('/api/jobs'), api.get('/api/tools'), api.get('/api/reminders')]);
     jobs = Array.isArray(jobResult) ? jobResult : (jobResult?.jobs ?? []);
     tools = safeTools(toolResult);
+    reminders = Array.isArray(reminderResult) ? reminderResult : (reminderResult?.reminders ?? []);
   } catch (error) {
     loadError = error.message || 'Could not load schedule data.';
   }
   if (!isCurrent()) return;
 
   currentJobs = jobs;
+  currentReminders = reminders;
   const toolOptions = tools.length
     ? tools.map((tool) => `<option value="${esc(tool.name)}">${esc(tool.name)} — ${esc(tool.description || 'SAFE/LOW risk')}</option>`).join('')
     : '<option value="">No implemented SAFE/LOW-risk tools available</option>';
@@ -136,6 +214,22 @@ export async function render(container) {
         <button type="submit" class="primary">Schedule task</button>
       </form>
     `)}
+    ${card('Create a reminder', `
+      <p class="muted">A reminder is recorded as due at its scheduled time. Browser notifications require this page to be open and notification permission granted.</p>
+      <form id="reminder-form">
+        <div class="form-row"><label for="reminder-title">Reminder</label><input id="reminder-title" type="text" required maxlength="200" placeholder="e.g. Call the client"></div>
+        <div class="form-row"><label for="reminder-note">Note (optional)</label><textarea id="reminder-note" maxlength="1000" placeholder="Details to remember"></textarea></div>
+        <div class="form-row"><label for="reminder-at">Remind me at (your local time)</label><input id="reminder-at" type="datetime-local" required></div>
+        <button type="submit" class="primary">Save reminder</button>
+      </form>
+    `)}
+    ${card('Reminders', `
+      <div class="inline" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span class="muted">Due reminders stay here until acknowledged or cancelled.</span>
+        <button data-reminder-action="enable-notifications">Enable browser notifications</button>
+      </div>
+      <div id="schedule-reminder-list">${remindersHtml(reminders)}</div>
+    `, { span2: true, id: 'schedule-reminders-card' })}
     ${card('Schedule a SAFE/LOW-risk tool', `
       <p class="muted">Only implemented SAFE/LOW-risk tools are listed. The server enforces this boundary too. Recurring jobs start after the selected interval.</p>
       <form id="schedule-tool-form">
@@ -155,8 +249,54 @@ export async function render(container) {
       <div id="schedule-job-list">${jobsHtml(jobs)}</div>
       ${loadError ? `<p class="muted" role="alert">Initial load warning: ${esc(loadError)}</p>` : ''}
     `, { span2: true, id: 'schedule-jobs-card' })}
-    <p class="muted" style="grid-column:1/-1;">Important: scheduled work runs only while XOFT's backend is awake and connected. This page schedules actions; a separate push-notification-only reminder service is not yet verified.</p>
+    <p class="muted" style="grid-column:1/-1;">Important: the backend must be awake to mark reminders due and run scheduled work. Browser notifications require this page to be open at/after the due time and permission granted; no external push service is configured.</p>
   `;
+
+  notifyDue(reminders);
+
+  onDelegate(container, 'submit', '#reminder-form', async (form, event) => {
+    event.preventDefault();
+    if (!isCurrent()) return;
+    const title = container.querySelector('#reminder-title').value.trim();
+    const note = container.querySelector('#reminder-note').value.trim();
+    const localDate = container.querySelector('#reminder-at').value;
+    const dueAt = new Date(localDate);
+    if (!title || !localDate || !Number.isFinite(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
+      toast('Enter a reminder and a future local time.', 'err');
+      return;
+    }
+    try {
+      await guarded(() => api.post('/api/reminders', { title, note, dueAt: dueAt.toISOString() }), 'Create reminder');
+      if (!isCurrent()) return;
+      container.querySelector('#reminder-form').reset();
+      toast('Reminder saved.', 'ok');
+      await refreshReminders(container, generation);
+    } catch { /* guarded already showed the error */ }
+  });
+
+  onDelegate(container, 'click', '[data-reminder-action]', async (button) => {
+    if (!isCurrent()) return;
+    const action = button.dataset.reminderAction;
+    if (action === 'refresh') { await refreshReminders(container, generation); return; }
+    if (action === 'enable-notifications') {
+      if (!('Notification' in window)) { toast('Browser notifications are not supported here.', 'err'); return; }
+      try {
+        const permission = await Notification.requestPermission();
+        toast(permission === 'granted' ? 'Browser notifications enabled.' : 'Browser notifications were not enabled.', permission === 'granted' ? 'ok' : 'warn');
+      } catch { toast('Could not request browser notification permission.', 'err'); }
+      return;
+    }
+    const id = button.dataset.reminderId;
+    if (!id) return;
+    if (action === 'cancel' && !window.confirm('Cancel this reminder?')) return;
+    const endpoint = action === 'acknowledge' ? 'acknowledge' : 'cancel';
+    try {
+      await guarded(() => api.post(`/api/reminders/${encodeURIComponent(id)}/${endpoint}`, {}), endpoint);
+      if (!isCurrent()) return;
+      toast(action === 'acknowledge' ? 'Reminder acknowledged.' : 'Reminder cancelled.', 'ok');
+      await refreshReminders(container, generation);
+    } catch { /* guarded already showed the error */ }
+  });
 
   onDelegate(container, 'submit', '#schedule-task-form', async (form, event) => {
     event.preventDefault();
@@ -229,7 +369,7 @@ export async function render(container) {
     } catch { /* guarded already showed the error */ }
   });
 
-  refreshTimer = setInterval(() => refreshJobs(container, generation), 15_000);
+  refreshTimer = setInterval(() => { refreshJobs(container, generation); refreshReminders(container, generation); }, 15_000);
   cleanup = () => {
     if (generation === viewGeneration) viewGeneration += 1;
     clearInterval(refreshTimer);
