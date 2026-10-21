@@ -13,14 +13,18 @@ function sessionId() {
 
 let mode = 'chat'; // 'chat' | 'advise'
 let activeController = null;
+let activeRequest = false;
+let viewGeneration = 0;
 const history = [];
 
 // Navigation away from Chat must cancel the browser request so the server can abort upstream model work.
 export function cleanup() {
   activeController?.abort();
+  viewGeneration += 1;
 }
 
 export function render(container) {
+  const renderGeneration = ++viewGeneration;
   container.innerHTML = `
     <div class="tabs">
       <button data-mode="chat" class="${mode === 'chat' ? 'active' : ''}">Chat</button>
@@ -40,13 +44,13 @@ export function render(container) {
   renderLog(container);
 
   onDelegate(container, 'click', '[data-mode]', (el) => {
-    if (activeController) return;
+    if (renderGeneration !== viewGeneration || activeRequest || mode === el.dataset.mode) return;
     mode = el.dataset.mode;
     render(container);
   });
 
-  onDelegate(container, 'click', '#chat-send', () => send(container));
-  onDelegate(container, 'click', '#chat-stop', () => activeController?.abort());
+  onDelegate(container, 'click', '#chat-send', () => { if (renderGeneration === viewGeneration) send(container, renderGeneration); });
+  onDelegate(container, 'click', '#chat-stop', () => { if (renderGeneration === viewGeneration) activeController?.abort(); });
   onDelegate(container, 'click', '#chat-speak-toggle', (button) => {
     const enabled = !isSpeakOutEnabled();
     setSpeakOutEnabled(enabled);
@@ -73,14 +77,16 @@ function renderLog(container) {
 }
 
 
-async function send(container) {
-  // Ignore Enter/button events while a request is active; otherwise a second
-  // blank assistant entry could be added while the first stream is running.
-  if (activeController) return;
+async function send(container, renderGeneration) {
+  // Ignore stale handlers and duplicate sends; only the current view may update its DOM.
+  if (renderGeneration !== viewGeneration || activeRequest) return;
   const input = container.querySelector('#chat-input');
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  activeRequest = true;
+  const isCurrentView = () => renderGeneration === viewGeneration;
+  let controller = null;
   history.push({ role: 'user', content: text });
   const assistantMessage = { role: 'assistant', content: '' };
   history.push(assistantMessage);
@@ -95,15 +101,15 @@ async function send(container) {
       const result = await api.post('/api/advise', { problem: text });
       const reply = result.advice ?? JSON.stringify(result);
       history.push({ role: 'assistant', content: reply });
-      speakOut(reply);
-      renderLog(container);
+      if (isCurrentView()) { speakOut(reply); renderLog(container); }
       return;
     }
     if (!navigator.onLine) throw new Error('You are offline. XOFT streaming chat cannot be queued safely; reconnect and try again.');
 
-    activeController = new AbortController();
+    controller = new AbortController();
+    activeController = controller;
     stopButton.disabled = false;
-    const response = await api.streamPost('/api/chat', { message: text, sessionId: sessionId(), stream: true }, { signal: activeController.signal });
+    const response = await api.streamPost('/api/chat', { message: text, sessionId: sessionId(), stream: true }, { signal: controller.signal });
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -121,11 +127,11 @@ async function send(container) {
       try { payload = JSON.parse(dataLines.join('\n')); } catch { return; }
       if (eventName === 'delta') {
         assistantMessage.content += String(payload.delta ?? '');
-        renderLog(container);
+        if (isCurrentView()) renderLog(container);
       } else if (eventName === 'done') {
         finalResult = payload;
         assistantMessage.content = String(payload.reply ?? assistantMessage.content);
-        renderLog(container);
+        if (isCurrentView()) renderLog(container);
       } else if (eventName === 'error') {
         serverError = String(payload.message ?? payload.error ?? 'XOFT streaming request failed.');
       }
@@ -148,13 +154,14 @@ async function send(container) {
     if (!finalResult) throw new Error('XOFT stream ended before a final result was received.');
     speakOut(assistantMessage.content);
   } catch (err) {
-    if (activeController?.signal.aborted || err?.name === 'AbortError') {
+    if (controller?.signal.aborted || err?.name === 'AbortError') {
       if (assistantMessage.content) assistantMessage.content += '\n\n[Generation stopped]';
       else assistantMessage.content = '[Generation stopped]';
-      renderLog(container);
+      if (isCurrentView()) renderLog(container);
       return;
     }
     if (!history.includes(assistantMessage)) history.push(assistantMessage);
+    if (!isCurrentView()) { assistantMessage.content ||= `Error: ${err.message}`; return; }
     let friendly = null;
     try {
       const body = JSON.parse(String(err.message).replace(/^\d{3}\s+/, ''));
@@ -176,9 +183,13 @@ async function send(container) {
     else assistantMessage.content = friendly ?? `Error: ${err.message}`;
     toast(friendly ? 'AI is unavailable' : err.message, friendly ? 'warn' : 'err');
   } finally {
-    activeController = null;
-    sendButton.disabled = false;
-    stopButton.disabled = true;
+    if (controller && activeController === controller) activeController = null;
+    activeRequest = false;
+    // The shared #content element may now contain another view; update only controls that still exist.
+    const currentSend = container.querySelector('#chat-send');
+    const currentStop = container.querySelector('#chat-stop');
+    if (currentSend) currentSend.disabled = false;
+    if (currentStop) currentStop.disabled = true;
   }
-  renderLog(container);
+  if (isCurrentView()) renderLog(container);
 }
