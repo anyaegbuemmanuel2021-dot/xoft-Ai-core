@@ -218,19 +218,20 @@ export class BackgroundJobManager {
     if (['completed','cancelled'].includes(current.status)) return current;
     this._clearTimer(id);
     const controller = this.activeControllers.get(id);
-    const uncertain = Boolean(controller);
+    const wasRunning = current.status === 'running';
+    const uncertain = Boolean(controller && wasRunning);
     if (controller && !controller.signal.aborted) {
       const error = new Error(`Background job '${id}' cancellation requested; external side-effect outcome may be uncertain.`);
       error.code = 'BACKGROUND_JOB_CANCELLED';
       controller.abort(error);
     }
-    if (current.kind === 'task' && !controller && this.taskPlanner && current.taskId) {
+    if (current.kind === 'task' && (!controller || !wasRunning) && this.taskPlanner && current.taskId) {
       try { this.taskPlanner.cancel(current.taskId); } catch { /* cancellation state is still recorded below */ }
     }
     const at = new Date().toISOString();
     const j=this._patch(id,j=>{j.status='cancelled';j.cancelledAt=at;j.sideEffectOutcomeUncertain=uncertain;j.runAt=null;j.updatedAt=at;});
     this.activityLog.log({type:'background_job_cancelled',detail:{jobId:id,sideEffectOutcomeUncertain:uncertain}});
-    if (!controller && current.kind !== 'task') this.eventBus?.emitEvent(EventType.TASK_CANCELLED,{jobId:id,taskId:current.taskId,reason:'operator_cancelled',sideEffectOutcomeUncertain:false,correlationId:current.correlationId});
+    if ((!controller || !wasRunning) && current.kind !== 'task') this.eventBus?.emitEvent(EventType.TASK_CANCELLED,{jobId:id,taskId:current.taskId,reason:'operator_cancelled',sideEffectOutcomeUncertain:false,correlationId:current.correlationId});
     return j;
   }
   loadAndSchedule(){
