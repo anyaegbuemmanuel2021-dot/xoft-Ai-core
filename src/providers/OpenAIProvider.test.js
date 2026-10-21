@@ -126,7 +126,7 @@ test('OpenAIProvider.stream accepts a final text delta carrying finish_reason in
   provider.isConfigured = () => true;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(
-    'data: {"choices":[{"delta":{"content":"complete answer"},"finish_reason":"stop"}]}\\n\\n',
+    'data: {"choices":[{"delta":{"content":"complete answer"},"finish_reason":"stop"}]}\n\n',
     { status: 200, headers: { 'content-type': 'text/event-stream' } },
   );
   try {
