@@ -133,10 +133,12 @@ export class OpenAIProvider extends AIProvider {
     let text = '';
     let usage = { inputTokens: 0, outputTokens: 0 };
     let finished = false;
+    let receivedDoneMarker = false;
 
     const processEvent = (raw) => {
       const data = raw.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
-      if (!data || data === '[DONE]') return;
+      if (!data) return;
+      if (data === '[DONE]') { receivedDoneMarker = true; return; }
       let payload;
       try { payload = JSON.parse(data); } catch { return; }
       const delta = payload.choices?.[0]?.delta?.content;
@@ -170,8 +172,17 @@ export class OpenAIProvider extends AIProvider {
         const out = processEvent(buffer);
         if (out) yield out;
       }
-      if (!finished && !text) throw new Error('OpenAIProvider: stream ended without response text');
+      // A non-empty partial answer is not a successful completion. Require an explicit provider
+      // finish_reason or the SSE [DONE] marker so the router cannot report truncated output as success.
+      if (!finished && !receivedDoneMarker) {
+        throw new Error(`OpenAIProvider: stream ended before a terminal marker (received ${text.length} text characters)`);
+      }
       yield { type: 'done', result: { text, usage, raw: 'openai' } };
+    } catch (err) {
+      if (signal?.aborted || err?.name === 'AbortError') {
+        try { err.errorType = 'cancelled'; } catch { /* non-extensible error */ }
+      }
+      throw err;
     } finally {
       reader.releaseLock();
     }
