@@ -1,4 +1,4 @@
-import { test, describe, after } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -72,10 +72,10 @@ describe('API authentication (real server, integration)', { concurrency: false }
   test('with AUTH_API_KEYS set, requests without a key are rejected', async () => {
     const server = await bootServer({ AUTH_API_KEYS: 'secretA,secretB' });
     try {
-      const res = await fetch('http://localhost:${server.port}/api/status');
+      const res = await fetch(`http://localhost:${server.port}/api/status`);
       assert.equal(res.status, 401);
     } finally {
-      server.stop();
+      await server.stop();
     }
   });
 
@@ -85,7 +85,7 @@ describe('API authentication (real server, integration)', { concurrency: false }
       const wrong = await fetch(`http://localhost:${server.port}/api/status`, { headers: { 'X-API-Key': 'nope' } });
       assert.equal(wrong.status, 401);
 
-      const first = await fetch('http://localhost:3103/api/status', { headers: { 'X-API-Key': 'secretA' } });
+      const first = await fetch(`http://localhost:${server.port}/api/status`, { headers: { 'X-API-Key': 'secretA' } });
       assert.equal(first.status, 200);
 
       const second = await fetch('http://localhost:3103/api/status', { headers: { Authorization: 'Bearer secretB' } });
@@ -101,7 +101,7 @@ describe('API authentication (real server, integration)', { concurrency: false }
       const res = await fetch(`http://localhost:${server.port}/api/devices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'x', platform: 'desktop' }) });
       assert.equal(res.status, 401);
 
-      const authed = await fetch('http://localhost:3104/api/devices', {
+      const authed = await fetch(`http://localhost:${server.port}/api/devices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': 'secretA' },
         body: JSON.stringify({ name: 'x', platform: 'desktop' }),
