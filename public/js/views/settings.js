@@ -17,7 +17,13 @@ export async function render(container) {
     <div class="grid">
       ${card('Executive briefing schedule', `
         <p class="muted">XOFT prepares a morning briefing and evening wrap-up from saved tasks, missions, opportunities and activity. Default times use Nigeria time (Africa/Lagos): 08:00 and 20:00.</p>
-        <div class="row"><span class="main">Scheduler process</span>${badge(briefing?.schedulerRunning ? 'running' : 'not running', briefing?.schedulerRunning ? 'ok' : 'warn')}</div>
+        <div class="row"><span class="main">Scheduler process</span>${badge(!briefing ? 'status unavailable' : briefing.schedulerRunning ? 'running' : 'not running', briefing?.schedulerRunning ? 'ok' : 'warn')}</div>
+        <div class="row"><span class="main">Schedule state</span>${badge(!briefing || typeof briefing.settings?.enabled !== 'boolean' ? 'unknown' : briefing.settings.enabled ? 'enabled' : 'disabled', briefing?.settings?.enabled === true ? 'ok' : 'warn')}</div>
+        <div class="row"><span class="main">Saved phone destination</span>${badge(!briefing ? 'unknown' : briefing.settings?.phoneNumber ? 'configured' : 'not set', briefing?.settings?.phoneNumber ? 'ok' : 'warn')}</div>
+        <div class="row"><span class="main">Delivery mode</span><span>${esc(!briefing ? 'Unknown (status unavailable)' : ({sms:'SMS',call:'Phone call',either:'SMS then call fallback',dashboard:'Dashboard only'})[briefing.settings?.channel || 'sms'] || 'Unknown')}</span></div>
+        <div class="muted" style="margin:8px 0 14px">
+          ${!briefing ? 'XOFT could not load briefing status from the server. The saved schedule and delivery state are unknown; check the connection before relying on reminders.' : !briefing.schedulerRunning ? 'The scheduler is not running in this server process. Saved times will not trigger until it starts.' : briefing.settings?.enabled === false ? 'The scheduler is running, but scheduled briefings are disabled.' : (briefing.settings?.channel !== 'dashboard' && !briefing.settings?.phoneNumber) ? 'A phone destination is missing. Add one below before expecting SMS or calls.' : 'The scheduler is running. Actual SMS/call delivery still depends on valid server-side provider credentials, webhook configuration, account permissions and provider acceptance.'}
+        </div>
         <div class="form-row"><label for="briefing-enabled">Scheduled briefings</label><select id="briefing-enabled"><option value="true" ${briefing?.settings?.enabled !== false ? 'selected' : ''}>Enabled</option><option value="false" ${briefing?.settings?.enabled === false ? 'selected' : ''}>Disabled</option></select></div>
         <div class="form-row"><label for="briefing-morning">Morning time</label><input id="briefing-morning" type="time" value="${esc(briefing?.settings?.morningTime || '08:00')}" /></div>
         <div class="form-row"><label for="briefing-evening">Evening time</label><input id="briefing-evening" type="time" value="${esc(briefing?.settings?.eveningTime || '20:00')}" /></div>
@@ -30,7 +36,7 @@ export async function render(container) {
         <button id="briefing-save" class="primary">Save briefing settings</button>
         <button id="briefing-preview">Preview briefing</button>
         <div id="briefing-result" class="muted" aria-live="polite">${briefing?.lastAttempt ? `Last attempt: ${esc(briefing.lastAttempt.status || 'unknown')} — ${esc(briefing.lastAttempt.error || briefing.lastAttempt.at || '')}` : 'No briefing delivery attempt recorded yet.'}</div>
-        <p class="muted">Delivery is provider-dependent. Phone delivery is not confirmed until a supported SMS/voice adapter is configured and the provider accepts the request. Keep the dashboard open for preview; the server scheduler requires the hosted process to remain running.</p>
+        <p class="muted">Important: a saved schedule is not an Android alarm and does not guarantee a call. XOFT must remain running on a server; phone delivery requires valid Twilio server credentials and public HTTPS voice webhooks. “Provider accepted” means Twilio accepted the request, not that your phone rang or you answered. Use Dashboard/activity only to test the schedule without sending a phone message.</p>
       ` , { span2: true })}
       ${card('API key', `
         <div class="form-row"><label>Key used by this browser</label><input id="api-key-input" placeholder="leave blank if AUTH_API_KEYS is unset" value="${esc(localStorage.getItem('xoft_api_key') || '')}" /></div>
