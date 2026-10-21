@@ -3,7 +3,7 @@ import path from 'node:path';
 import { GATEWAY_IDS, GATEWAY_DEFAULTS, normalizeBaseUrl, envNum } from './gatewayConfig.js';
 
 /**
- * GatewaySettingsStore — lets the Settings UI configure FreeLLMAPI / LiteLLM without editing .env.
+ * GatewaySettingsStore — lets the Settings UI configure FreeLLMAPI / LiteLLM / OpenRouter without editing .env.
  *
  * Precedence: values saved here override the env-derived defaults in `config.providers[id]`; deleting a field (or the file) falls back
  * to the env. The file lives in the data directory (gitignored), is written atomically with owner-only permissions, and is NEVER
