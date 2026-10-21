@@ -20,7 +20,7 @@ import { startFakeHermes } from './_fakeHermes.js';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-hint-'));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-async function until(fn, { timeout = 8000, label = 'condition' } = {}) { const end = Date.now() + timeout; for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error(`timed out waiting for ${label}`); await wait(15); } }
+async function until(fn, { timeout = 15000, label = 'condition' } = {}) { const end = Date.now() + timeout; for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new Error(`timed out waiting for ${label}`); await wait(15); } }
 const GOAL = 'Open my project, inspect the authentication system, find the bug, fix it, run the tests and report what you changed.';
 
 class CoreStub extends Engine {

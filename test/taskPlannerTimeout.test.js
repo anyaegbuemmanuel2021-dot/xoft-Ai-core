@@ -1,0 +1,59 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { TaskPlanner } from '../src/planner/TaskPlanner.js';
+import { ToolRegistry } from '../src/tools/ToolRegistry.js';
+import { ApprovalSystem } from '../src/approval/ApprovalSystem.js';
+import { ActivityLog } from '../src/activity/ActivityLog.js';
+import { EventBus } from '../src/events/EventBus.js';
+
+test('TaskPlanner deadline aborts the tool and leaves an ambiguous execution record instead of retrying blindly', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-task-timeout-'));
+  const activityLog = new ActivityLog({ dataDir });
+  const eventBus = new EventBus({ activityLog });
+  const toolRegistry = new ToolRegistry({ defaultDeviceId: 'local' });
+  let receivedSignal = null;
+  let calls = 0;
+  toolRegistry.register({
+    name: 'test.hanging-task-tool',
+    description: 'waits until its task deadline aborts it',
+    inputSchema: {},
+    riskLevel: 0,
+    requiredPermissions: [],
+    status: 'implemented',
+    async run(_input, context) {
+      calls += 1;
+      receivedSignal = context.signal;
+      return new Promise((_resolve, reject) => {
+        context.signal.addEventListener('abort', () => reject(context.signal.reason ?? new Error('aborted')), { once: true });
+      });
+    },
+  });
+  const approvalSystem = new ApprovalSystem({ activityLog, eventBus, dataDir });
+  const router = {
+    async complete() {
+      return { text: JSON.stringify({ steps: [{ id: 'step-1', toolName: 'test.hanging-task-tool', input: {}, dependsOn: [], description: 'run hanging test tool' }], blockedReason: null }) };
+    },
+  };
+  const planner = new TaskPlanner({ router, toolRegistry, approvalSystem, activityLog, memory: null, eventBus, dataDir, maxDurationMs: 1000 });
+
+  try {
+    const task = await planner.plan('run a hanging test tool');
+    await assert.rejects(() => planner.execute(task.id), (error) => error.code === 'TASK_TIMEOUT');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const savedTask = planner._getTask(task.id);
+    assert.equal(savedTask.status, 'timed_out');
+    assert.equal(savedTask.steps[0].status, 'failed');
+    assert.equal(savedTask.steps[0].ambiguousExecution, true);
+    assert.equal(receivedSignal.aborted, true);
+    assert.equal(calls, 1);
+    const dangling = planner.executionRecordStore.findDangling(savedTask.steps[0].idempotencyKey);
+    assert.ok(dangling, 'execution ledger must preserve uncertainty rather than recording a definite failure');
+    assert.equal(dangling.status, 'running');
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});

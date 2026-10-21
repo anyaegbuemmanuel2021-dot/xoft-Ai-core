@@ -188,6 +188,66 @@ describe('BackgroundJobManager — incidents and interrupted-job recovery', () =
     } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
   });
 
+  test('scheduled task runtime budget is passed through to TaskPlanner', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-task-job-budget-'));
+    const activityLog = new ActivityLog({ dataDir });
+    const eventBus = new EventBus({ activityLog });
+    const toolRegistry = new ToolRegistry({ defaultDeviceId: 'local' });
+    let receivedBudget = null;
+    const taskPlanner = {
+      maxDurationMs: 10000,
+      async plan(goal) { return { id: 'task-budget-1', goal }; },
+      async execute(taskId, options) { receivedBudget = options.maxDurationMs; return { id: taskId, status: 'completed', steps: [] }; },
+    };
+    const manager = new BackgroundJobManager({ toolRegistry, taskPlanner, activityLog, eventBus, memory: null, dataDir });
+    try {
+      const scheduled = await manager.scheduleTask({ goal: 'run a bounded task', delayMs: 0, maxRunMs: 2000 });
+      await sleep(50);
+      assert.equal(scheduled.job.maxRunMs, 2000);
+      assert.equal(receivedBudget, 2000);
+      assert.equal(manager.get(scheduled.job.id).status, 'completed');
+    } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
+  });
+
+  test('a tool job timeout aborts the tool signal, records an incident, and is not retried blindly', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-job-timeout-'));
+    const activityLog = new ActivityLog({ dataDir });
+    const eventBus = new EventBus({ activityLog });
+    const toolRegistry = new ToolRegistry({ defaultDeviceId: 'local' });
+    let calls = 0;
+    let receivedContext = null;
+    toolRegistry.register({
+      name: 'test.hanging-tool', description: 'waits until aborted', inputSchema: {},
+      riskLevel: 0, requiredPermissions: [], status: 'implemented',
+      async run(_input, context) {
+        calls += 1;
+        receivedContext = context;
+        return new Promise((_resolve, reject) => {
+          context.signal.addEventListener('abort', () => reject(context.signal.reason ?? new Error('aborted')), { once: true });
+        });
+      },
+    });
+    const incidentManager = new IncidentManager({ dataDir, activityLog, eventBus });
+    const manager = new BackgroundJobManager({ toolRegistry, taskPlanner: null, activityLog, eventBus, memory: null, incidentManager, dataDir });
+    try {
+      const job = manager.scheduleOnce({ toolName: 'test.hanging-tool', input: {}, delayMs: 0, maxRunMs: 100 });
+      await sleep(250);
+      const stored = manager.get(job.id);
+      assert.equal(stored.status, 'timed_out');
+      assert.equal(stored.attempts, 1);
+      assert.equal(stored.runAt, null);
+      assert.match(stored.lastError, /external side effects may be uncertain/);
+      assert.equal(calls, 1, 'timed-out work must not be automatically retried');
+      assert.equal(receivedContext.signal.aborted, true);
+      assert.equal(receivedContext.idempotencyKey, stored.executionIdempotencyKey);
+      assert.ok(receivedContext.idempotencyKey.startsWith(job.id + ':'));
+      assert.equal(receivedContext.correlationId, job.correlationId);
+      assert.equal(incidentManager.summary().errors, 1);
+      await sleep(50);
+      assert.equal(calls, 1, 'no retry timer should be armed after timeout');
+    } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
+  });
+
   test('background job failures create redacted durable incidents and redact the saved retry error', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-job-incident-'));
     const activityLog = new ActivityLog({ dataDir });

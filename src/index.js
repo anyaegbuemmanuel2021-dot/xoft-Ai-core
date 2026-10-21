@@ -1862,12 +1862,12 @@ app.get('/api/knowledge-graph/stats', (_req, res) => res.json(knowledgeGraph.sta
 
 // --- Background jobs (general scheduler, distinct from monitors/rules) ---
 app.post('/api/jobs', (req, res) => {
-  const { toolName, input, delayMs, intervalMs } = req.body ?? {};
+  const { toolName, input, delayMs, intervalMs, maxRunMs } = req.body ?? {};
   if (!toolName) return res.status(400).json({ error: 'toolName is required' });
   try {
     const job = intervalMs
-      ? backgroundJobManager.scheduleRecurring({ toolName, input: input ?? {}, intervalMs })
-      : backgroundJobManager.scheduleOnce({ toolName, input: input ?? {}, delayMs: delayMs ?? 0 });
+      ? backgroundJobManager.scheduleRecurring({ toolName, input: input ?? {}, intervalMs, maxRunMs })
+      : backgroundJobManager.scheduleOnce({ toolName, input: input ?? {}, delayMs: delayMs ?? 0, maxRunMs });
     res.json(job);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1875,10 +1875,10 @@ app.post('/api/jobs', (req, res) => {
 });
 
 app.post('/api/task-schedules', async (req, res) => {
-  const { goal, executeAt, delayMs, autonomyLevel } = req.body ?? {};
+  const { goal, executeAt, delayMs, autonomyLevel, maxRunMs } = req.body ?? {};
   if (!goal) return res.status(400).json({ error: 'goal is required' });
   try {
-    res.json(await backgroundJobManager.scheduleTask({ goal, executeAt, delayMs, autonomyLevel }));
+    res.json(await backgroundJobManager.scheduleTask({ goal, executeAt, delayMs, autonomyLevel, maxRunMs }));
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
