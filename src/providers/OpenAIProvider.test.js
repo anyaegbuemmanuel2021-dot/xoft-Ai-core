@@ -135,6 +135,7 @@ test('OpenAIProvider.stream accepts a final text delta carrying finish_reason in
     assert.deepEqual(events.map((event) => event.type), ['text', 'done']);
     assert.equal(events[0].delta, 'complete answer');
     assert.equal(events[1].result.text, 'complete answer');
+    assert.deepEqual(events[1].result.usage, { inputTokens: 2, outputTokens: 3 });
   } finally {
     globalThis.fetch = originalFetch;
   }
