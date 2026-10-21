@@ -19,11 +19,12 @@ const DEFAULTS = Object.freeze({
  * remain authoritative. This scheduler does not invent tools or bypass gates.
  */
 export class MissionAutopilot {
-  constructor({ missionScheduler, emergencyStop, dataDir = './data', sqliteStore = null, activityLog, eventBus, now = () => new Date() } = {}) {
+  constructor({ missionScheduler, emergencyStop, dataDir = './data', sqliteStore = null, activityLog, eventBus, incidentManager = null, now = () => new Date() } = {}) {
     this.missionScheduler = missionScheduler;
     this.emergencyStop = emergencyStop;
     this.activityLog = activityLog;
     this.eventBus = eventBus;
+    this.incidentManager = incidentManager;
     this.now = now;
     this.store = new JsonStore({ dataDir, fileName: 'mission-autopilot.json', kvKey: 'mission-autopilot', defaultValue: { settings: DEFAULTS }, sqliteStore });
     this.timer = null;
@@ -139,9 +140,12 @@ export class MissionAutopilot {
     const current = this.settings();
     current.lastRunAt = now.toISOString();
     current.lastRunStatus = 'failed';
-    current.lastRunSummary = { error: String(err?.message ?? err).slice(0, 500) };
+    let incident = null;
+    try { incident = this.incidentManager?.capture(err, { source: 'mission_autopilot', severity: 'error', context: { enabled: current.enabled, lastRunAt: current.lastRunAt } }) ?? null; } catch { /* keep the scheduler's own state durable */ }
+    const safeError = this.incidentManager?.redact(err?.message ?? err) ?? String(err?.message ?? err).slice(0, 500);
+    current.lastRunSummary = { error: safeError.slice(0, 500), incidentId: incident?.id ?? null };
     current.nextRunAt = current.enabled ? new Date(now.getTime() + current.intervalSeconds * 1000).toISOString() : null;
     this.store.save({ settings: current });
-    this.activityLog?.log({ type: 'mission_autopilot_error', detail: { error: String(err?.message ?? err).slice(0, 500) } });
+    this.activityLog?.log({ type: 'mission_autopilot_error', detail: { error: safeError.slice(0, 500), incidentId: incident?.id ?? null } });
   }
 }
