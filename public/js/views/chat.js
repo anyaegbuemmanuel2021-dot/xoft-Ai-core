@@ -131,6 +131,7 @@ async function send(container) {
     if (!finalResult) throw new Error('XOFT stream ended before a final result was received.');
     speakOut(assistantMessage.content);
   } catch (err) {
+    if (!history.includes(assistantMessage)) history.push(assistantMessage);
     let friendly = null;
     try {
       const body = JSON.parse(String(err.message).replace(/^\d{3}\s+/, ''));
