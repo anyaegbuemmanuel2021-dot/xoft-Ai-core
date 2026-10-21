@@ -1,4 +1,4 @@
-// aiGateways.js — Settings section for the OPTIONAL AI gateways (FreeLLMAPI, LiteLLM) plus the overall "is AI available" status.
+// aiGateways.js — Settings section for the OPTIONAL AI gateways (FreeLLMAPI, LiteLLM, OpenRouter) plus the overall "is AI available" status.
 // Each gateway is configured independently; leaving one unconfigured never affects the other or the rest of Xoft.
 // The API key field is WRITE-ONLY: the server never returns a key (only "is set" + a masked hint), and an empty field means "leave unchanged".
 import { badge, esc, toast } from '../dom.js';
@@ -16,6 +16,7 @@ async function call(method, path, payload) {
 const META = {
   freellmapi: { title: 'FreeLLMAPI', hint: 'Self-hosted OpenAI-compatible proxy that pools free LLM tiers. Default http://localhost:3001/v1. Needs its unified API key (from its dashboard Keys page).', keyLabel: 'API key (required)', modelHint: 'auto, auto:fast, auto:smart, or a model id' },
   litellm: { title: 'LiteLLM', hint: 'Self-hosted OpenAI-compatible gateway to 100+ providers. Default http://localhost:4000/v1. API key = the proxy master/virtual key (optional if your proxy is open).', keyLabel: 'API key (optional)', modelHint: 'a model_name from your LiteLLM config.yaml' },
+  openrouter: { title: 'OpenRouter (free models)', hint: 'Cloud-hosted model gateway. Default https://openrouter.ai/api/v1. Use openrouter/free for free-model routing; free tier limits and availability apply.', keyLabel: 'API key (required)', modelHint: 'openrouter/free or an OpenRouter model id' },
 };
 const STATE_TONE = { available: 'ok', starting: '', disabled: '', unconfigured: 'warn', invalid_configuration: 'err', unavailable: 'err', unhealthy: 'warn', rate_limited: 'warn', authentication_error: 'err', timeout: 'warn', server_error: 'err', cooldown: 'warn' };
 const STATE_TEXT = { available: 'available', starting: 'configured — not tested yet', disabled: 'disabled', unconfigured: 'needs configuration', invalid_configuration: 'invalid configuration', unavailable: 'unavailable', unhealthy: 'unhealthy', rate_limited: 'rate limited', authentication_error: 'authentication error', timeout: 'timeout', server_error: 'server error', cooldown: 'cooling down' };
@@ -26,7 +27,7 @@ function card(id, g) {
     <p class="muted">${esc(m.hint)}</p>
     <div data-gw-status>${badge(STATE_TEXT[s.state] ?? s.state, STATE_TONE[s.state] ?? '')}${s.issue ? ` <span class="muted">${esc(s.issue)}</span>` : ''}${s.cooldownUntil ? ` <span class="muted">retry after ${esc(new Date(s.cooldownUntil).toLocaleTimeString())}</span>` : ''}${s.lastProbe ? ` <span class="muted">last test: ${esc(s.lastProbe.result)}</span>` : ''}</div>
     <div class="form-row"><label><input type="checkbox" data-f="enabled" ${g.enabled ? 'checked' : ''}/> Enabled</label></div>
-    <div class="form-row"><label>Base URL</label><input data-f="baseUrl" value="${esc(g.baseUrl)}" placeholder="http://localhost:${id === 'freellmapi' ? 3001 : 4000}/v1" style="width:100%"/></div>
+    <div class="form-row"><label>Base URL</label><input data-f="baseUrl" value="${esc(g.baseUrl)}" placeholder="${id === 'freellmapi' ? 'http://localhost:3001/v1' : id === 'litellm' ? 'http://localhost:4000/v1' : 'https://openrouter.ai/api/v1'}" style="width:100%"/></div>
     <div class="form-row"><label>${esc(m.keyLabel)}</label><input data-f="apiKey" type="password" autocomplete="off" placeholder="${g.apiKeySet ? `saved (${esc(g.apiKeyMasked ?? '••••')}) — leave blank to keep` : 'not set'}" style="width:100%"/>${g.apiKeySet ? `<label class="muted"><input type="checkbox" data-f="clearKey"/> remove the saved key</label>` : ''}</div>
     <div class="form-row"><label>Model</label><input data-f="model" list="gw-models-${esc(id)}" value="${esc(g.model ?? '')}" placeholder="${esc(m.modelHint)}" style="width:100%"/><datalist id="gw-models-${esc(id)}"></datalist></div>
     <div class="form-row"><label>Embedding model <span class="muted">(optional — enables semantic memory through this gateway when OpenAI is not configured)</span></label><input data-f="embeddingModel" value="${esc(g.embeddingModel ?? '')}" style="width:100%"/></div>
@@ -47,8 +48,8 @@ export async function mountAiGateways(el) {
     ? `<p>${badge('AI available', 'ok')} <span class="muted">Configured: ${esc(status.configuredProviders.join(', '))}</span></p>`
     : `<p>${badge('No AI provider', 'warn')} <span class="muted">Xoft is running normally without AI. Files, devices, automations, settings and logs all work; only AI features are unavailable until a provider is configured.</span></p>`) : '';
   el.innerHTML = `<h2>AI providers — optional gateways</h2>${banner}
-    <p class="muted">Xoft does not require FreeLLMAPI, LiteLLM, or any single AI provider. Configure any one, both, or neither; a problem with one never affects the others.</p>
-    ${denied ? `<div class="empty">Gateway settings need the admin API key (${esc(denied)}).</div>` : `${card('freellmapi', gws.freellmapi)}${card('litellm', gws.litellm)}`}`;
+    <p class="muted">Xoft does not require FreeLLMAPI, LiteLLM, OpenRouter, or any single AI provider. Configure any one, both, or neither; a problem with one never affects the others.</p>
+    ${denied ? `<div class="empty">Gateway settings need the admin API key (${esc(denied)}).</div>` : `${card('freellmapi', gws.freellmapi)}${card('litellm', gws.litellm)}${card('openrouter', gws.openrouter)}`}`;
   if (denied) return;
 
   const out = (id, html) => { const n = el.querySelector(`[data-gw="${id}"] [data-gw-out]`); if (n) n.innerHTML = html; };
