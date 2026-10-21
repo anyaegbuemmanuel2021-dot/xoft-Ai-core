@@ -79,6 +79,7 @@ import { MemoryConsolidator } from './memory/MemoryConsolidator.js';
 import { MemoryRetentionManager } from './memory/MemoryRetentionManager.js';
 import { KnowledgeGraph } from './memory/KnowledgeGraph.js';
 import { BackgroundJobManager } from './background/BackgroundJobManager.js';
+import { IncidentManager } from './operations/IncidentManager.js';
 import { WorkflowEngine } from './workflows/WorkflowEngine.js';
 import { AutonomyManager } from './autonomy/AutonomyManager.js';
 import { DomainAutonomy, DOMAINS, domainForTool } from './autonomy/DomainAutonomy.js';
@@ -123,6 +124,7 @@ const activityLog = new ActivityLog({ dataDir: config.memory.dataDir });
 const opportunityFollowUpPlanner = new OpportunityFollowUpPlanner({ dataDir: config.memory.dataDir, sqliteStore: durableStore, opportunityStore, activityLog });
 const visionInterpreter = new VisionInterpreter({ providerRouter: router, activityLog });
 const eventBus = new EventBus({ activityLog });
+const incidentManager = new IncidentManager({ dataDir: config.memory.dataDir, sqliteStore: durableStore, activityLog, eventBus });
 // Assigned once the HTTP server exists (RealtimeServer needs it to attach
 // the WS upgrade handler) — declared here so routes defined above that
 // point can still reference it safely at request time.
@@ -240,7 +242,7 @@ const memoryConflictResolver = new MemoryConflictResolver(router);
 const memoryConsolidator = new MemoryConsolidator(router);
 const memoryRetentionManager = new MemoryRetentionManager();
 const knowledgeGraph = new KnowledgeGraph({ dataDir: config.memory.dataDir, sqliteStore: durableStore });
-const backgroundJobManager = new BackgroundJobManager({ toolRegistry, taskPlanner, activityLog, eventBus, memory, dataDir: config.memory.dataDir, sqliteStore: durableStore });
+const backgroundJobManager = new BackgroundJobManager({ toolRegistry, taskPlanner, activityLog, eventBus, memory, incidentManager, dataDir: config.memory.dataDir, sqliteStore: durableStore });
 backgroundJobManager.loadAndSchedule();
 const workflowEngine = new WorkflowEngine({ toolRegistry, activityLog, eventBus, memory, dataDir: config.memory.dataDir, sqliteStore: durableStore });
 workflowEngine.reattachListeners();
@@ -1284,6 +1286,17 @@ app.get('/api/activity', (req, res) => {
   res.json(activityLog.query({ taskId }));
 });
 
+// --- Durable incidents (admin-only because records may contain operational details) ---
+app.get('/api/incidents', requireAdmin, (req, res) => {
+  const limit = Number(req.query.limit) || 100;
+  res.json({ summary: incidentManager.summary(), incidents: incidentManager.list({ status: req.query.status, severity: req.query.severity, limit }) });
+});
+app.post('/api/incidents/:id/resolve', requireAdmin, (req, res) => {
+  const incident = incidentManager.resolve(req.params.id, { resolvedBy: req.body?.resolvedBy || 'operator', note: req.body?.note || '' });
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+  return res.json(incident);
+});
+
 // --- Voice ---
 // POST /api/voice/speak  { "text": "..." } -> audio/mpeg bytes
 app.post('/api/voice/speak', async (req, res) => {
@@ -2111,6 +2124,25 @@ const deploymentManager = new DeploymentManager({ selfDev, watchdog: systemWatch
 app.post('/api/selfdev/proposals/:id/deploy', requireAdmin, async (req, res) => {
   const { approvedBy, canaryWindowMs } = req.body ?? {};
   try { res.json(await deploymentManager.deploy(req.params.id, { approvedBy, canaryWindowMs })); } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// Last-resort HTTP error boundary: record a redacted incident and never return stack traces to clients.
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = Number(err?.statusCode ?? err?.status) >= 400 && Number(err?.statusCode ?? err?.status) < 600
+    ? Number(err.statusCode ?? err.status)
+    : 500;
+  const incident = incidentManager.capture(err, {
+    source: 'http_unhandled',
+    severity: status >= 500 ? 'error' : 'warning',
+    correlationId: req.requestId,
+    context: { method: req.method, path: req.path, requestId: req.requestId, status },
+  });
+  return res.status(status).json({
+    error: status >= 500 ? 'Internal server error' : incidentManager.redact(err?.message ?? 'Request failed'),
+    incidentId: incident.id,
+    correlationId: req.requestId,
+  });
 });
 
 const server = app.listen(config.port, config.host, () => {
