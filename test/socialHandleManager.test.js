@@ -52,7 +52,7 @@ test('autonomy requires configured tools and an explicit owner confirmation', ()
   } finally { f.cleanup(); }
 });
 
-test('per-handle kill switch disables future autonomy and cancels only that handle queued posts', () => {
+test('per-handle kill switch disables future autonomy and cancels only that handle queued posts', async () => {
   const f = fixture();
   try {
     const handle = f.manager.create({ platform: 'instagram', handle: '@softly1810' });
@@ -115,12 +115,12 @@ test('a KILL during asynchronous tool discovery cannot be overwritten by a stale
   } finally { f.cleanup(); }
 });
 
-test('removing a handle disables it and cancels queued posts before deleting configuration', () => {
+test('removing a handle disables it and cancels queued posts before deleting configuration', async () => {
   const f = fixture();
   try {
     const handle = f.manager.create({ platform: 'instagram', handle: '@softly1810' });
     f.manager.update(handle.id, { connectorId: 'social', readTool: 'read_posts', publishTool: 'publish_post' });
-    f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' });
+    await f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' });
     f.posts.push({ id: 'queued-to-remove', status: 'scheduled', targetAccounts: [{ platform: 'instagram', profileId: 'instagram:softly1810', handle: '@softly1810' }] });
     const result = f.manager.remove(handle.id);
     assert.equal(result.removed, true);
