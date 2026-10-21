@@ -40,7 +40,7 @@ test('social handles support multiple platform profiles and reject duplicate han
   } finally { f.cleanup(); }
 });
 
-test('autonomy requires configured tools and an explicit owner confirmation', () => {
+test('autonomy requires configured tools and an explicit owner confirmation', async () => {
   const f = fixture();
   try {
     const handle = f.manager.create({ platform: 'instagram', handle: '@softly1810' });
