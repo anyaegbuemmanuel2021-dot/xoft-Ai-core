@@ -4,7 +4,7 @@ import { JsonStore } from '../persistence/JsonStore.js';
 const MAX_INCIDENTS = 1000;
 const MAX_EVENTS_PER_INCIDENT = 20;
 const SECRET_FIELD = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|authorization|cookie|private[_-]?key|secret|token)/i;
-const SECRET_ASSIGNMENT = /((?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|password|authorization|cookie|secret)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}&]+)/gi;
+const SECRET_ASSIGNMENT = /((?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|password|authorization|cookie|secret|token)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}&]+)/gi;
 
 export function redactSensitive(value) {
   return String(value ?? '')
