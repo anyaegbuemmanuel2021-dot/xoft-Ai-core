@@ -201,11 +201,11 @@ describe('BackgroundJobManager — incidents and interrupted-job recovery', () =
     };
     const manager = new BackgroundJobManager({ toolRegistry, taskPlanner, activityLog, eventBus, memory: null, dataDir });
     try {
-      const job = await manager.scheduleTask({ goal: 'run a bounded task', delayMs: 0, maxRunMs: 2000 });
+      const scheduled = await manager.scheduleTask({ goal: 'run a bounded task', delayMs: 0, maxRunMs: 2000 });
       await sleep(50);
-      assert.equal(job.maxRunMs, 2000);
+      assert.equal(scheduled.job.maxRunMs, 2000);
       assert.equal(receivedBudget, 2000);
-      assert.equal(manager.get(job.id).status, 'completed');
+      assert.equal(manager.get(scheduled.job.id).status, 'completed');
     } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
   });
 
