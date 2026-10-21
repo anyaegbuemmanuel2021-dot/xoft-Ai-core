@@ -88,10 +88,10 @@ describe('API authentication (real server, integration)', { concurrency: false }
       const first = await fetch(`http://localhost:${server.port}/api/status`, { headers: { 'X-API-Key': 'secretA' } });
       assert.equal(first.status, 200);
 
-      const second = await fetch('http://localhost:3103/api/status', { headers: { Authorization: 'Bearer secretB' } });
+      const second = await fetch(`http://localhost:${server.port}/api/status`, { headers: { Authorization: 'Bearer secretB' } });
       assert.equal(second.status, 200);
     } finally {
-      server.stop();
+      await server.stop();
     }
   });
 
