@@ -52,3 +52,31 @@ test('preflight briefing marks risky plans as awaiting confirmation', () => {
   assert.equal(briefing.requiresApproval, true);
   assert.equal(briefing.maxRiskName, 'HIGH_IMPACT');
 });
+
+
+test('ExecutiveBrain.handleStream delegates ordinary chat to the orchestrator stream', async () => {
+  const streamed = [];
+  const brain = new ExecutiveBrain({
+    router: {},
+    memory: {},
+    orchestrator: {
+      async *stream(sessionId, message, { signal } = {}) {
+        streamed.push({ sessionId, message, signal });
+        yield { type: 'text', delta: 'hello' };
+        yield { type: 'done', result: { intent: 'conversation', reply: 'hello' } };
+      },
+      handle: async () => ({ reply: 'fallback' }),
+    },
+    taskPlanner: {},
+    approvalSystem: {},
+    worldState: {},
+    activityLog: { log() {} },
+  });
+  brain.classifier = { classify: async () => ({ action: 'delegate' }) };
+  const controller = new AbortController();
+  const events = [];
+  for await (const event of brain.handleStream('s1', 'hello?', { signal: controller.signal })) events.push(event);
+  assert.deepEqual(events.map((event) => event.type), ['text', 'done']);
+  assert.deepEqual(streamed, [{ sessionId: 's1', message: 'hello?', signal: controller.signal }]);
+});
+
