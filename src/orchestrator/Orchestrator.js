@@ -61,6 +61,65 @@ export class Orchestrator {
     return { intent: classification.intent, ...result };
   }
 
+
+  /**
+   * Stream a normal chat response while preserving intent, memory, personality,
+   * and style behavior. Commit the assistant turn only after successful completion.
+   */
+  async *stream(sessionId, message, { signal } = {}) {
+    this.userStyle?.recordSample(message);
+    this.memory.addTurn(sessionId, 'user', message);
+    const classification = await this.intentDetector.detect(message);
+
+    if (classification.intent !== Intent.CONVERSATION) {
+      let result;
+      switch (classification.intent) {
+        case Intent.REMEMBER: result = await this._handleRemember(message, classification); break;
+        case Intent.FORGET: result = await this._handleForget(classification); break;
+        case Intent.RECALL: result = await this._handleRecall(message, classification); break;
+        default: result = { reply: 'I could not classify that request safely.' };
+      }
+      this.memory.addTurn(sessionId, 'assistant', result.reply);
+      if (result.reply) yield { type: 'text', delta: result.reply };
+      yield { type: 'done', result: { intent: classification.intent, ...result } };
+      return;
+    }
+
+    const conversation = this.memory.getConversation(sessionId);
+    let memoryContext = '';
+    if (this.memory.vectorEnabled) {
+      try {
+        const relevant = await this.memory.recallSemantic(message, 3);
+        const useful = relevant.filter((r) => r.score > 0.75);
+        if (useful.length) memoryContext = `\n\nMEMORY CONTEXT:\n${useful.map((r) => `- ${r.content}`).join('\n')}`;
+      } catch {
+        // Semantic recall is optional; keep chat available if it is offline.
+      }
+    }
+    const personalityFragment = this.personality ? `\n\n${this.personality.describeForPrompt()}` : '';
+    const addressFragment = this.address ? `\n\n${this.address.describeForPrompt(sessionId)}` : '';
+    const styleFragment = this.userStyle ? (() => { const d = this.userStyle.describeForPrompt(); return d ? `\n\n${d}` : ''; })() : '';
+
+    let reply = '';
+    let final = null;
+    for await (const event of this.router.stream(TaskType.REASONING, {
+      system: ASSISTANT_SYSTEM_PROMPT + memoryContext + personalityFragment + addressFragment + styleFragment,
+      messages: conversation,
+      maxTokens: 1024,
+      signal,
+    })) {
+      if (event.type === 'text') {
+        reply += event.delta;
+        yield event;
+      } else if (event.type === 'done') {
+        final = event.result;
+      }
+    }
+    if (!final) throw new Error('Orchestrator: provider stream ended without a final result');
+    this.memory.addTurn(sessionId, 'assistant', reply);
+    yield { type: 'done', result: { intent: classification.intent, reply, meta: { usage: final.usage, provider: final.raw } } };
+  }
+
   async _handleRemember(message, classification) {
     const category = classification.category || 'fact';
     // The user directly asked XOFT to remember this — the strongest
