@@ -10,6 +10,7 @@ import { ApprovalSystem } from '../src/approval/ApprovalSystem.js';
 import { MonitorManager } from '../src/background/MonitorManager.js';
 import { RulesEngine } from '../src/automation/RulesEngine.js';
 import { BackgroundJobManager } from '../src/background/BackgroundJobManager.js';
+import { IncidentManager } from '../src/operations/IncidentManager.js';
 import { WorkflowEngine } from '../src/workflows/WorkflowEngine.js';
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -159,6 +160,60 @@ describe('BackgroundJobManager — restart-safe absolute scheduling', () => {
     await sleep(150);
     assert.equal(getCalls(), 1, 'must still run at its originally scheduled absolute time');
     killTimers(manager2);
+  });
+});
+
+describe('BackgroundJobManager — incidents and interrupted-job recovery', () => {
+  test('a job left running by a process crash becomes interrupted instead of being replayed automatically', () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-job-interrupted-'));
+    const activityLog = new ActivityLog({ dataDir });
+    const eventBus = new EventBus({ activityLog });
+    const toolRegistry = new ToolRegistry({ defaultDeviceId: 'local' });
+    const { tool, getCalls } = makeCountingTool('test.interrupted');
+    toolRegistry.register(tool);
+    fs.writeFileSync(path.join(dataDir, 'background_jobs.json'), JSON.stringify({ jobs: [{
+      id: 'job-left-running', correlationId: 'corr-restart-1', kind: 'once', toolName: tool.name, input: {},
+      intervalMs: null, taskId: null, goal: null, runAt: new Date(Date.now() - 1000).toISOString(),
+      status: 'running', attempts: 0, lastRunAt: null, lastResult: null, lastError: null, createdAt: new Date().toISOString(),
+    }] }));
+    const incidentManager = new IncidentManager({ dataDir, activityLog, eventBus });
+    const manager = new BackgroundJobManager({ toolRegistry, taskPlanner: null, activityLog, eventBus, memory: null, incidentManager, dataDir });
+    try {
+      const recovered = manager.loadAndSchedule();
+      assert.deepEqual(recovered, { recovered: 0, interrupted: 1 });
+      assert.equal(manager.get('job-left-running').status, 'interrupted');
+      assert.match(manager.get('job-left-running').lastError, /Automatic replay was withheld/);
+      assert.equal(getCalls(), 0, 'a possibly side-effectful job must not be replayed blindly');
+      assert.equal(incidentManager.summary().warnings, 1);
+    } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
+  });
+
+  test('background job failures create redacted durable incidents and redact the saved retry error', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-job-incident-'));
+    const activityLog = new ActivityLog({ dataDir });
+    const eventBus = new EventBus({ activityLog });
+    const toolRegistry = new ToolRegistry({ defaultDeviceId: 'local' });
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz123456';
+    toolRegistry.register({
+      name: 'test.secret-failure', description: 'throws a secret-bearing error', inputSchema: {},
+      riskLevel: 0, requiredPermissions: [], status: 'implemented',
+      async run() { throw new Error(`Authorization: Bearer superSecretToken api_key=${secret}`); },
+    });
+    const incidentManager = new IncidentManager({ dataDir, activityLog, eventBus });
+    const manager = new BackgroundJobManager({ toolRegistry, taskPlanner: null, activityLog, eventBus, memory: null, incidentManager, dataDir });
+    try {
+      const job = manager.scheduleOnce({ toolName: 'test.secret-failure', input: {}, delayMs: 0 });
+      await sleep(100);
+      const storedJob = manager.get(job.id);
+      const incidents = incidentManager.list();
+      assert.equal(storedJob.status, 'retry_wait');
+      assert.ok(!storedJob.lastError.includes(secret));
+      assert.ok(!storedJob.lastError.includes('superSecretToken'));
+      assert.equal(incidents.length, 1);
+      assert.ok(!JSON.stringify(incidents).includes(secret));
+      assert.ok(!JSON.stringify(incidents).includes('superSecretToken'));
+      assert.equal(incidents[0].correlationIds[0], job.correlationId);
+    } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
   });
 });
 
