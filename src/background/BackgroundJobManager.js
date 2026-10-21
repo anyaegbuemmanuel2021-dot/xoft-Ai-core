@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { JsonStore } from '../persistence/JsonStore.js';
 import { EventType } from '../events/EventBus.js';
 import { redactSensitive } from '../operations/IncidentManager.js';
+import { RiskLevel } from '../tools/Tool.js';
 
 const MAX_JOB_RETRIES = 3;
 const BASE_BACKOFF_MS = 5_000;
@@ -59,6 +60,14 @@ export class BackgroundJobManager {
     return { task, job };
   }
   _schedule({ toolName=null,input={},kind,intervalMs=null,taskId=null,goal=null,runAt,maxRunMs=DEFAULT_JOB_TIMEOUT_MS }) {
+    if (kind !== 'task') {
+      const tool = this.toolRegistry.get(toolName);
+      const riskLevel = Number.isFinite(tool?.riskLevel) ? tool.riskLevel : RiskLevel.HIGH_IMPACT;
+      if (!tool) throw new Error(`BackgroundJobManager: no tool named '${toolName}'`);
+      if (riskLevel > RiskLevel.LOW) {
+        throw new Error('Direct background tool jobs are limited to SAFE/LOW-risk tools. Schedule EXTERNAL/HIGH_IMPACT actions as a TaskPlanner task so approval checks remain enforced.');
+      }
+    }
     const job={id:crypto.randomUUID(),correlationId:crypto.randomUUID(),kind,toolName,input,intervalMs,taskId,goal,maxRunMs:kind==='task'?normalizeTaskBudget(maxRunMs,this.taskPlanner?.maxDurationMs):normalizeBudget(maxRunMs),runAt,status:'scheduled',attempts:0,lastRunAt:null,lastResult:null,lastError:null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     const data=this._load(); data.jobs.push(job); this._save(data); this.activityLog.log({type:'background_job_created',detail:{jobId:job.id,kind,toolName,taskId,runAt}}); this._arm(job); return job;
   }

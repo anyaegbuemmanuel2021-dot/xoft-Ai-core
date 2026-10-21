@@ -209,6 +209,26 @@ describe('BackgroundJobManager — incidents and interrupted-job recovery', () =
     } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
   });
 
+  test('direct background jobs reject EXTERNAL tools so approval gates cannot be bypassed', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-job-risk-guard-'));
+    const activityLog = new ActivityLog({ dataDir });
+    const eventBus = new EventBus({ activityLog });
+    const toolRegistry = new ToolRegistry({ defaultDeviceId: 'local' });
+    toolRegistry.register({
+      name: 'test.external-action', description: 'external action', inputSchema: {},
+      riskLevel: 2, requiredPermissions: [], status: 'implemented',
+      async run() { return { ok: true }; },
+    });
+    const manager = new BackgroundJobManager({ toolRegistry, taskPlanner: null, activityLog, eventBus, memory: null, dataDir });
+    try {
+      assert.throws(
+        () => manager.scheduleOnce({ toolName: 'test.external-action', input: {}, delayMs: 0 }),
+        /limited to SAFE\/LOW-risk tools/,
+      );
+      assert.equal(manager.list().length, 0);
+    } finally { killTimers(manager); fs.rmSync(dataDir, { recursive: true, force: true }); }
+  });
+
   test('a tool job timeout aborts the tool signal, records an incident, and is not retried blindly', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xoft-job-timeout-'));
     const activityLog = new ActivityLog({ dataDir });
