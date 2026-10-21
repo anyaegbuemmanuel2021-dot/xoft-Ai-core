@@ -18,7 +18,11 @@ export class Watchdog {
     this._timer = null;
   }
 
-  _captureError(error, source, context = {}) {\n    try { this.incidentManager?.capture(error, { source, severity: 'warning', context }); } catch { /* diagnostics must remain available even if incident storage fails */ }\n  }\n\n  async diagnose() {
+  _captureError(error, source, context = {}) {
+    try { this.incidentManager?.capture(error, { source, severity: 'warning', context }); } catch { /* diagnostics must remain available even if incident storage fails */ }
+  }
+
+  async diagnose() {
     const checks = [];
     const add = (name, level, detail) => checks.push({ name, level, detail });
     try {
