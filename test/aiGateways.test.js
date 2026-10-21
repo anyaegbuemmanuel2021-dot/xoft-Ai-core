@@ -30,6 +30,7 @@ function allOff() {
   P.ollama.enabled = false;
   Object.assign(P.freellmapi, { enabled: false, apiKey: null, baseUrl: 'http://localhost:3001/v1', model: 'auto', embeddingModel: null, timeoutMs: 60000, vision: false, tools: true });
   Object.assign(P.litellm, { enabled: false, apiKey: null, baseUrl: 'http://localhost:4000/v1', model: '', embeddingModel: null, timeoutMs: 60000, vision: false, tools: true });
+  Object.assign(P.openrouter, { enabled: false, apiKey: null, baseUrl: 'https://openrouter.ai/api/v1', model: 'openrouter/free', embeddingModel: null, timeoutMs: 60000, vision: false, tools: true });
   config.aiRouting.primaryProvider = null; config.aiRouting.fallbackProviders = []; config.aiRouting.fallbackEnabled = true;
 }
 /** Turns the EXISTING OpenAI provider on and answers its real URL (api.openai.com) locally; everything else hits the real network stack. */
@@ -51,11 +52,13 @@ beforeEach(() => { allOff(); directCalls = 0; free.state.mode = 'ok'; lite.state
 afterEach(() => { globalThis.fetch = realFetch; });
 
 describe('gateway configuration is a provider-level STATE, never a startup error', () => {
-  test('both gateways default to disabled and off the availability list', () => {
-    const c = gatewayConfigFromEnv('freellmapi', {}); const l = gatewayConfigFromEnv('litellm', {});
-    assert.equal(c.enabled, false); assert.equal(l.enabled, false);
+  test('all optional gateways default to disabled, with OpenRouter using its official endpoint and free-model alias', () => {
+    const c = gatewayConfigFromEnv('freellmapi', {}); const l = gatewayConfigFromEnv('litellm', {}); const o = gatewayConfigFromEnv('openrouter', {});
+    assert.equal(c.enabled, false); assert.equal(l.enabled, false); assert.equal(o.enabled, false);
     assert.equal(c.baseUrl, 'http://localhost:3001/v1'); assert.equal(l.baseUrl, 'http://localhost:4000/v1');
+    assert.equal(o.baseUrl, 'https://openrouter.ai/api/v1'); assert.equal(o.model, 'openrouter/free');
     assert.equal(gatewayConfigState('freellmapi', c).state, 'disabled');
+    assert.equal(gatewayConfigState('openrouter', o).state, 'disabled');
   });
   test('enabled without a key: FreeLLMAPI => unconfigured; LiteLLM (key is optional on an open proxy) => configured', () => {
     assert.equal(gatewayConfigState('freellmapi', { enabled: true, baseUrl: 'http://localhost:3001/v1', apiKey: null }).state, 'unconfigured');
@@ -263,6 +266,19 @@ describe('ProviderRouter — the ten-case test matrix (real router, real gateway
     router._instances.gemini = { name: 'gemini', isConfigured: () => true, complete: async () => ({ text: 'survivor', raw: 'gemini' }) };
     assert.equal((await ask(router)).text, 'survivor');
     assert.doesNotThrow(() => router.configuredProviders());
+  });
+});
+
+describe('OpenRouter integration', () => {
+  test('uses the shared gateway adapter and can be explicitly selected without changing default routing', async () => {
+    enableGateway('openrouter', free, { apiKey: 'freellmapi-good-key-123456', model: 'openrouter/free' });
+    config.aiRouting.primaryProvider = 'openrouter';
+    config.aiRouting.fallbackProviders = [];
+    const { router } = newRouter();
+    const result = await ask(router);
+    assert.match(result.text, /from free/);
+    assert.equal(router.gatewayStatus('openrouter').enabled, true);
+    assert.equal(router.gatewayStatus('openrouter').model, 'openrouter/free');
   });
 });
 

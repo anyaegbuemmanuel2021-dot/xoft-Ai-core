@@ -1,7 +1,7 @@
 import { GATEWAY_IDS, maskKey } from './gatewayConfig.js';
 
 /**
- * REST surface for the optional AI gateways (FreeLLMAPI, LiteLLM): status, configuration, connection test, model discovery/selection.
+ * REST surface for the optional AI gateways (FreeLLMAPI, LiteLLM, OpenRouter): status, configuration, connection test, model discovery/selection.
  * Kept out of index.js so it can be exercised directly. All mutating/secret-adjacent routes require the admin key (not a device token);
  * API keys are write-only — never returned, logged, or included in error text.
  */

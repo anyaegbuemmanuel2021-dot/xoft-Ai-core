@@ -6,6 +6,7 @@ import { OllamaProvider } from './OllamaProvider.js';
 import { ExperientialProvider } from './ExperientialProvider.js';
 import { FreeLLMAPIProvider } from './FreeLLMAPIProvider.js';
 import { LiteLLMProvider } from './LiteLLMProvider.js';
+import { OpenRouterProvider } from './OpenRouterProvider.js';
 import { NoAiProviderError, AllProvidersFailedError, ProviderRoutingConfigError, classifyProviderError } from './errors.js';
 import { gatewayConfigState, GATEWAY_IDS } from './gatewayConfig.js';
 import { deriveProviderState } from './providerState.js';
@@ -52,6 +53,7 @@ export class ProviderRouter {
       // Optional OpenAI-compatible gateways: independent peers of every other provider, disabled unless configured.
       freellmapi: new FreeLLMAPIProvider(),
       litellm: new LiteLLMProvider(),
+      openrouter: new OpenRouterProvider(),
     };
     this.healthManager = healthManager ?? null;
   }
@@ -89,7 +91,7 @@ export class ProviderRouter {
     const gateway = safeConfigured(experiential) ? [experiential] : [];
     // FreeLLMAPI / LiteLLM are peers, not "the best provider": by default they rank after the direct providers and before the local
     // model, so enabling one never changes which direct provider answers. To make one primary, use AI_PRIMARY_PROVIDER / AI_FALLBACK_PROVIDERS.
-    const gw = [this._instances.litellm, this._instances.freellmapi];
+    const gw = [this._instances.openrouter, this._instances.litellm, this._instances.freellmapi];
     switch (taskType) {
       case TaskType.SIMPLE:
         return [...gateway, this._instances.openaiFast, this._instances.gemini, this._instances.claude, this._instances.grok, ...gw, local];

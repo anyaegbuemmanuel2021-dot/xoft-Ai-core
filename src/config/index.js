@@ -173,6 +173,7 @@ export const config = {
     // malformed setting is a provider-level *state* (unconfigured / invalid_configuration), never a startup error. See docs/AI_GATEWAYS.md.
     freellmapi: gatewayConfigFromEnv('freellmapi'),
     litellm: gatewayConfigFromEnv('litellm'),
+    openrouter: gatewayConfigFromEnv('openrouter'),
     ollama: {
       // Local model fallback — used when no cloud provider is configured, or when
       // every configured cloud provider fails (e.g. no internet). Off by default:
@@ -185,16 +186,8 @@ export const config = {
     },
   },
 
-  // Optional global override of ProviderRouter's per-task-type preference
-  // lists (see ProviderRouter._preferenceFor). When aiRouting.primaryProvider
-  // is unset (the default), the router keeps its existing task-aware
-  // ordering — e.g. Claude first for reasoning, OpenAI-fast first for
-  // simple tasks — which is more useful than one global order. Setting it
-  // pins a single provider first for EVERY task type instead; fallback
-  // beyond it is only used when aiRouting.fallbackEnabled is true (default
-  // true, matching the router's existing behavior), so a user who wants a
-  // hard "never silently switch providers" guarantee can set
-  // AI_FALLBACK_ENABLED=false and know only their chosen primary is ever tried.
+  // Keep the original task-aware ordering unless the operator explicitly pins a primary provider.
+  // AI_FALLBACK_PROVIDERS is only used when AI_PRIMARY_PROVIDER is set.
   aiRouting: {
     fallbackEnabled: String(required('AI_FALLBACK_ENABLED', 'true')).toLowerCase() === 'true',
     primaryProvider: required('AI_PRIMARY_PROVIDER', null),
@@ -218,6 +211,7 @@ export function availableProviders() {
   if (config.providers.experiential.apiKey) avail.push('experiential');
   if (gatewayConfigState('freellmapi', config.providers.freellmapi).configured) avail.push('freellmapi');
   if (gatewayConfigState('litellm', config.providers.litellm).configured) avail.push('litellm');
+  if (gatewayConfigState('openrouter', config.providers.openrouter).configured) avail.push('openrouter');
   if (config.providers.ollama.enabled) avail.push('ollama');
   return avail;
 }
@@ -237,6 +231,7 @@ export function integrationStatus() {
     experiential: Boolean(config.providers.experiential.apiKey),
     freellmapi: gatewayConfigState('freellmapi', config.providers.freellmapi).configured,
     litellm: gatewayConfigState('litellm', config.providers.litellm).configured,
+    openrouter: gatewayConfigState('openrouter', config.providers.openrouter).configured,
     twilio: Boolean(config.twilio.accountSid && config.twilio.authToken && config.twilio.fromNumber && config.twilio.voiceWebhookUrl && config.twilio.voiceResponseUrl),
   };
 }
