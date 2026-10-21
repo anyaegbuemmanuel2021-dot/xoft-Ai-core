@@ -52,6 +52,7 @@ export function render(container) {
   onDelegate(container, 'click', '#chat-send', () => { if (renderGeneration === viewGeneration) send(container, renderGeneration); });
   onDelegate(container, 'click', '#chat-stop', () => { if (renderGeneration === viewGeneration) activeController?.abort(); });
   onDelegate(container, 'click', '#chat-speak-toggle', (button) => {
+    if (renderGeneration !== viewGeneration) return;
     const enabled = !isSpeakOutEnabled();
     setSpeakOutEnabled(enabled);
     window.dispatchEvent(new CustomEvent('xoft:speakout-change'));
@@ -59,9 +60,9 @@ export function render(container) {
     button.setAttribute('aria-pressed', String(enabled));
     toast(enabled ? 'Speak Out enabled — XOFT replies will be read aloud.' : 'Speak Out disabled.', 'info');
   });
-  onDelegate(container, 'click', '#chat-speak-stop', () => stopSpeaking());
+  onDelegate(container, 'click', '#chat-speak-stop', () => { if (renderGeneration === viewGeneration) stopSpeaking(); });
   container.querySelector('#chat-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(container); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(container, renderGeneration); }
   });
 }
 
