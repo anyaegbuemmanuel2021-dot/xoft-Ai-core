@@ -125,8 +125,8 @@ export class IncidentTriageService {
       candidateFiles: [], diagnosis: null, recommendedActions: [], repairProposal: null,
       repairRejectedReason: null, error: null,
     };
-    this._saveAttempt(attempt);
     try {
+      this._saveAttempt(attempt);
       const candidates = this._candidateFiles(incident.error?.stack);
       attempt.candidateFiles = candidates.map((file) => ({ path: file.path, line: file.line }));
       const payload = {
