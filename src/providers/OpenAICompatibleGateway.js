@@ -17,7 +17,7 @@ function parseRetryAfter(h) {
 }
 
 /**
- * OpenAICompatibleGateway — shared implementation for optional OpenAI-compatible gateways (FreeLLMAPI, LiteLLM).
+ * OpenAICompatibleGateway — shared implementation for optional OpenAI-compatible gateways (FreeLLMAPI, LiteLLM, OpenRouter).
  *
  * A gateway is *just another provider inside the existing ProviderRouter*. It never owns tools, self-editing, files, the browser or
  * the terminal: it only supplies model output. Tool calls come back normalized ({name, input}) and are executed by Xoft's own executor.
