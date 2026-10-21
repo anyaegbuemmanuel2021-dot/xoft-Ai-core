@@ -50,6 +50,9 @@ function jobRow(job) {
     job.attempts ? `attempts ${job.attempts}` : '',
   ].filter(Boolean).join(' · ');
   const actions = [];
+  if (job.kind === 'task' && ['waiting_approval','waiting_verification','blocked'].includes(job.status)) {
+    actions.push('<a class="button" href="#tasks">Open task</a>');
+  }
   if (['scheduled', 'retry_wait'].includes(job.status)) {
     actions.push(`<button data-job-action="pause" data-job-id="${esc(job.id)}">Pause</button>`);
     actions.push(`<button data-job-action="cancel" data-job-id="${esc(job.id)}" class="danger">Cancel</button>`);
