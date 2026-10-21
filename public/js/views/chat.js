@@ -34,7 +34,7 @@ export function render(container) {
       <div id="chat-log"></div>
       <div id="chat-input-row">
         <textarea id="chat-input" placeholder="${mode === 'chat' ? 'Ask XOFT to do something…' : 'Describe a problem to reason through…'}"></textarea>
-        <button id="chat-send" class="primary">Send</button>
+        <button id="chat-send" class="primary" ${activeRequest ? 'disabled' : ''}>Send</button>
         <button id="chat-stop" type="button" disabled>Stop generating</button>
         <button id="chat-speak-toggle" type="button" aria-pressed="${isSpeakOutEnabled()}" ${canSpeakOut() ? '' : 'disabled'}>${isSpeakOutEnabled() ? 'Speak Out: ON' : 'Speak Out: OFF'}</button>
         <button id="chat-speak-stop" type="button" ${canSpeakOut() ? '' : 'disabled'}>Stop Speaking</button>
