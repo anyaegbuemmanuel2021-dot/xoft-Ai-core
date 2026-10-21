@@ -92,6 +92,33 @@ export class ExecutiveBrain {
     }
   }
 
+
+  /**
+   * Stream ordinary conversation through the same ExecutiveBrain classification
+   * gate. Actionful requests keep their existing planner/approval semantics.
+   */
+  async *handleStream(sessionId, message, { signal } = {}) {
+    const classification = await this.classifier.classify(message);
+    this.activityLog.log({ type: 'executive_classified', detail: { sessionId, action: classification.action } });
+
+    if (classification.action === ExecutiveAction.DELEGATE && typeof this.orchestrator.stream === 'function') {
+      for await (const event of this.orchestrator.stream(sessionId, message, { signal })) yield event;
+      return;
+    }
+
+    let result;
+    switch (classification.action) {
+      case ExecutiveAction.WORLD_STATE: result = await this._handleWorldState(sessionId, message); break;
+      case ExecutiveAction.GOAL: result = await this._handleGoal(sessionId, message); break;
+      case ExecutiveAction.ADVISE: result = await this._handleAdvise(sessionId, message); break;
+      case ExecutiveAction.CONFIRM: result = await this._handleConfirm(sessionId); break;
+      case ExecutiveAction.CANCEL: result = await this._handleCancel(sessionId); break;
+      default: result = await this.orchestrator.handle(sessionId, message);
+    }
+    if (result?.reply) yield { type: 'text', delta: result.reply };
+    yield { type: 'done', result };
+  }
+
   // ADVISE — genuine problem-solving, grounded in real project context, no execution
   async _handleAdvise(sessionId, message) {
     this.memory.addTurn(sessionId, 'user', message);
