@@ -560,6 +560,7 @@ const missionAutopilot = new MissionAutopilot({
   sqliteStore: durableStore,
   activityLog,
   eventBus,
+  incidentManager,
 });
 missionAutopilot.start();
 app.get('/api/autopilot/status', (req, res) => {
@@ -2070,7 +2071,7 @@ eventBus.on('emergency_stop_activated', () => { for (const t of engineTaskManage
 const systemWatchdog = new Watchdog({
   telemetry: systemTelemetry,
   providerOverview: () => buildProviderOverview({ router, modelHealth, config }),
-  missionManager, emergencyStop, activityLog, eventBus,
+  missionManager, emergencyStop, activityLog, eventBus, incidentManager,
   realtime: () => ({ available: Boolean(realtimeServer?.wss), clients: realtimeServer?.clientCount() ?? 0 }),
   taskQueueStatus: () => taskQueue.status(),
   runtimeHealth: () => runtimeDevices(),
