@@ -11,11 +11,18 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const ADMIN_KEY = 'admin-secret-key';
 
 async function freePort() {
-  const server = net.createServer();
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  const { port } = server.address();
-  await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
-  return port;
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const port = 32300 + ((process.pid + attempt) % 200);
+    const server = net.createServer();
+    try {
+      await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
+      await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+      return port;
+    } catch (error) {
+      if (error?.code !== 'EADDRINUSE' && error?.code !== 'EACCES') throw error;
+    }
+  }
+  throw new Error('Could not reserve a free device-scoping test port.');
 }
 
 async function bootServer(port = null) {
