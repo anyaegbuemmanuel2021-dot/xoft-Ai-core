@@ -43,10 +43,10 @@ test('autonomy requires configured tools and an explicit owner confirmation', ()
   const f = fixture();
   try {
     const handle = f.manager.create({ platform: 'instagram', handle: '@softly1810' });
-    assert.throws(() => f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' }), /Set the connector/);
+    await assert.rejects(() => f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' }), /Set the connector/);
     const configured = f.manager.update(handle.id, { connectorId: 'social', readTool: 'read_posts', publishTool: 'publish_post' });
-    assert.throws(() => f.manager.setAutonomy(configured.id, true, { confirmedBy: '' }), /owner name/);
-    const enabled = f.manager.setAutonomy(configured.id, true, { confirmedBy: 'Owner' });
+    await assert.rejects(() => f.manager.setAutonomy(configured.id, true, { confirmedBy: '' }), /owner name/);
+    const enabled = await f.manager.setAutonomy(configured.id, true, { confirmedBy: 'Owner' });
     assert.equal(enabled.autoEnabled, true);
     assert.equal(enabled.autonomyConfirmedBy, 'Owner');
   } finally { f.cleanup(); }
@@ -57,7 +57,7 @@ test('per-handle kill switch disables future autonomy and cancels only that hand
   try {
     const handle = f.manager.create({ platform: 'instagram', handle: '@softly1810' });
     f.manager.update(handle.id, { connectorId: 'social', readTool: 'read_posts', publishTool: 'publish_post' });
-    f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' });
+    await f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' });
     // Simulate the queued post being associated with this handle's generated id.
     const ownPost = { id: 'queued-own', status: 'scheduled', targetAccounts: [{ profileId: handle.handle, handleId: handle.id }] };
     f.posts.push(ownPost, { id: 'queued-manual', status: 'scheduled', targetAccounts: [{ platform: 'instagram', profileId: 'instagram:softly1810', handle: '@softly1810' }] });
@@ -82,6 +82,36 @@ test('tool preflight requires the exact reader and publisher tools to exist on t
     });
     f.manager.update(handle.id, { publishTool: 'wrong_tool' });
     await assert.rejects(f.manager.validateTools(handle.id), /was not found in the selected connector/);
+  } finally { f.cleanup(); }
+});
+
+test('a KILL during asynchronous tool discovery cannot be overwritten by a stale autonomy-enable request', async () => {
+  const f = fixture();
+  try {
+    const handle = f.manager.create({ platform: 'instagram', handle: '@race-test' });
+    f.manager.update(handle.id, { connectorId: 'social', readTool: 'read_posts', publishTool: 'publish_post' });
+
+    let entered;
+    let release;
+    const discoveryStarted = new Promise((resolve) => { entered = resolve; });
+    const discoveryGate = new Promise((resolve) => { release = resolve; });
+    f.manager.connectorManager.discover = async () => {
+      entered();
+      await discoveryGate;
+      return { tools: [{ name: 'read_posts' }, { name: 'publish_post' }] };
+    };
+
+    const enabling = f.manager.setAutonomy(handle.id, true, { confirmedBy: 'Owner' });
+    await discoveryStarted;
+    const killed = f.manager.kill(handle.id, 'KILL during tool validation');
+    assert.equal(killed.killed, true);
+    release();
+
+    await assert.rejects(enabling, /handle changed while tools were being validated/);
+    const latest = f.manager.get(handle.id);
+    assert.equal(latest.autoEnabled, false);
+    assert.equal(latest.nextRunAt, null);
+    assert.ok(latest.stoppedAt);
   } finally { f.cleanup(); }
 });
 
