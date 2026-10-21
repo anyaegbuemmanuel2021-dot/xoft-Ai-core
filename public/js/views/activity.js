@@ -60,7 +60,23 @@ export async function render(container) {
         alert('Could not resolve incident: ' + error.message);
       }
     });
-    cleanup = onEvent(['incident.created', 'incident.updated', 'incident.resolved'], debounce(() => render(container), 500));
+    onDelegate(container, 'click', '[data-triage-incident]', async (el) => {
+      if (!window.confirm('Run AI triage and a sandbox test for this incident? XOFT will not apply code automatically. This can take several minutes.')) return;
+      el.disabled = true;
+      try {
+        const result = await api.post(`/api/incidents/${encodeURIComponent(el.dataset.triageIncident)}/triage`, {});
+        const actions = (result.recommendedActions ?? []).map((item) => '• ' + item).join('\n');
+        const proposal = result.repairProposal
+          ? `\n\nRepair proposal: ${result.repairProposal.id}\nStatus: ${result.repairProposal.status}\nA passing proposal still requires explicit human approval before applying.`
+          : `\n\nNo repair proposal created. ${result.repairRejectedReason || 'The triage found no safe automatic patch candidate.'}`;
+        window.alert(`XOFT incident triage\n\n${result.diagnosis || 'No diagnosis returned.'}${actions ? '\n\nRecommended next steps:\n' + actions : ''}${proposal}`);
+        render(container);
+      } catch (error) {
+        window.alert('Incident triage failed: ' + error.message);
+        el.disabled = false;
+      }
+    });
+    cleanup = onEvent(['incident.created', 'incident.updated', 'incident.resolved', 'incident.triaged'], debounce(() => render(container), 500));
   }
 }
 
@@ -99,7 +115,7 @@ function incidentRow(incident) {
       <div class="muted">${esc(incident.count || 1)} occurrence(s) · first ${fmtTime(incident.firstSeenAt)} · last ${fmtTime(incident.lastSeenAt)}</div>
       <div class="muted">Correlation ID: ${esc(incident.lastCorrelationId || 'not recorded')}</div>
       <details><summary>Technical context</summary><pre>${esc(JSON.stringify({ stack: error.stack, recentEvents: context }, null, 2)).slice(0, 5000)}</pre></details>
-      ${incident.status === 'open' ? `<button type="button" data-resolve-incident="${esc(incident.id)}">Mark resolved</button>` : incident.resolution ? `<div class="muted">Resolved by ${esc(incident.resolution.by || 'operator')} at ${fmtTime(incident.resolution.at)}: ${esc(incident.resolution.note || '')}</div>` : ''}
+      ${incident.status === 'open' ? `<div style="display:flex; gap:8px; flex-wrap:wrap;"><button type="button" data-triage-incident="${esc(incident.id)}">AI triage + sandbox</button><button type="button" data-resolve-incident="${esc(incident.id)}">Mark resolved</button></div>` : incident.resolution ? `<div class="muted">Resolved by ${esc(incident.resolution.by || 'operator')} at ${fmtTime(incident.resolution.at)}: ${esc(incident.resolution.note || '')}</div>` : ''}
     </div>
   `;
 }
