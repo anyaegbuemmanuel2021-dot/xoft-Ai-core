@@ -1875,10 +1875,10 @@ app.post('/api/jobs', (req, res) => {
 });
 
 app.post('/api/task-schedules', async (req, res) => {
-  const { goal, executeAt, delayMs, autonomyLevel } = req.body ?? {};
+  const { goal, executeAt, delayMs, autonomyLevel, maxRunMs } = req.body ?? {};
   if (!goal) return res.status(400).json({ error: 'goal is required' });
   try {
-    res.json(await backgroundJobManager.scheduleTask({ goal, executeAt, delayMs, autonomyLevel }));
+    res.json(await backgroundJobManager.scheduleTask({ goal, executeAt, delayMs, autonomyLevel, maxRunMs }));
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
