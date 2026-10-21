@@ -12,6 +12,7 @@ function sessionId() {
 }
 
 let mode = 'chat'; // 'chat' | 'advise'
+let activeController = null;
 const history = [];
 
 export function render(container) {
@@ -25,6 +26,7 @@ export function render(container) {
       <div id="chat-input-row">
         <textarea id="chat-input" placeholder="${mode === 'chat' ? 'Ask XOFT to do something…' : 'Describe a problem to reason through…'}"></textarea>
         <button id="chat-send" class="primary">Send</button>
+        <button id="chat-stop" type="button" disabled>Stop generating</button>
         <button id="chat-speak-toggle" type="button" aria-pressed="${isSpeakOutEnabled()}" ${canSpeakOut() ? '' : 'disabled'}>${isSpeakOutEnabled() ? 'Speak Out: ON' : 'Speak Out: OFF'}</button>
         <button id="chat-speak-stop" type="button" ${canSpeakOut() ? '' : 'disabled'}>Stop Speaking</button>
       </div>
@@ -33,11 +35,13 @@ export function render(container) {
   renderLog(container);
 
   onDelegate(container, 'click', '[data-mode]', (el) => {
+    if (activeController) return;
     mode = el.dataset.mode;
     render(container);
   });
 
   onDelegate(container, 'click', '#chat-send', () => send(container));
+  onDelegate(container, 'click', '#chat-stop', () => activeController?.abort());
   onDelegate(container, 'click', '#chat-speak-toggle', (button) => {
     const enabled = !isSpeakOutEnabled();
     setSpeakOutEnabled(enabled);
@@ -65,6 +69,8 @@ function renderLog(container) {
 
 
 async function send(container) {
+  // Prevent overlapping requests and duplicate assistant placeholders.
+  if (activeController) return;
   const input = container.querySelector('#chat-input');
   const text = input.value.trim();
   if (!text) return;
@@ -74,6 +80,9 @@ async function send(container) {
   history.push(assistantMessage);
   renderLog(container);
 
+  const sendButton = container.querySelector('#chat-send');
+  const stopButton = container.querySelector('#chat-stop');
+  sendButton.disabled = true;
   try {
     if (mode !== 'chat') {
       history.pop();
@@ -86,7 +95,9 @@ async function send(container) {
     }
     if (!navigator.onLine) throw new Error('You are offline. XOFT streaming chat cannot be queued safely; reconnect and try again.');
 
-    const response = await api.streamPost('/api/chat', { message: text, sessionId: sessionId(), stream: true });
+    activeController = new AbortController();
+    stopButton.disabled = false;
+    const response = await api.streamPost('/api/chat', { message: text, sessionId: sessionId(), stream: true }, { signal: activeController.signal });
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -131,6 +142,12 @@ async function send(container) {
     if (!finalResult) throw new Error('XOFT stream ended before a final result was received.');
     speakOut(assistantMessage.content);
   } catch (err) {
+    if (activeController?.signal.aborted || err?.name === 'AbortError') {
+      if (assistantMessage.content) assistantMessage.content += '\n\n[Generation stopped]';
+      else assistantMessage.content = '[Generation stopped]';
+      renderLog(container);
+      return;
+    }
     if (!history.includes(assistantMessage)) history.push(assistantMessage);
     let friendly = null;
     try {
@@ -152,6 +169,10 @@ async function send(container) {
     if (assistantMessage.content) assistantMessage.content += `\n\n[Stream interrupted: ${friendly ?? err.message}]`;
     else assistantMessage.content = friendly ?? `Error: ${err.message}`;
     toast(friendly ? 'AI is unavailable' : err.message, friendly ? 'warn' : 'err');
+  } finally {
+    activeController = null;
+    sendButton.disabled = false;
+    stopButton.disabled = true;
   }
   renderLog(container);
 }
