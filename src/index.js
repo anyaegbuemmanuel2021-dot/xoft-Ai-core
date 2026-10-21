@@ -1289,10 +1289,12 @@ app.get('/api/activity', (req, res) => {
 
 // --- Durable incidents (admin-only because records may contain operational details) ---
 app.get('/api/incidents', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot access incident records.' });
   const limit = Number(req.query.limit) || 100;
   res.json({ summary: incidentManager.summary(), incidents: incidentManager.list({ status: req.query.status, severity: req.query.severity, limit }) });
 });
 app.post('/api/incidents/:id/resolve', requireAdmin, (req, res) => {
+  if (req.deviceAuth) return res.status(403).json({ error: 'Device-scoped credentials cannot resolve incident records.' });
   const incident = incidentManager.resolve(req.params.id, { resolvedBy: req.body?.resolvedBy || 'operator', note: req.body?.note || '' });
   if (!incident) return res.status(404).json({ error: 'Incident not found' });
   return res.json(incident);
