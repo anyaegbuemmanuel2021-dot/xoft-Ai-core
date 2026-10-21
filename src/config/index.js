@@ -186,15 +186,12 @@ export const config = {
     },
   },
 
-  // Global provider preference for every task type. Default is OpenAI first, then
-  // configured fallbacks in order (Gemini first, followed by optional free/other
-  // gateways). This makes quota/outage fallback predictable across the app.
-  // Override AI_PRIMARY_PROVIDER / AI_FALLBACK_PROVIDERS to change the order.
-  // Set AI_FALLBACK_ENABLED=false to disable cloud fallbacks.
+  // Keep the original task-aware ordering unless the operator explicitly pins a primary provider.
+  // AI_FALLBACK_PROVIDERS is only used when AI_PRIMARY_PROVIDER is set.
   aiRouting: {
     fallbackEnabled: String(required('AI_FALLBACK_ENABLED', 'true')).toLowerCase() === 'true',
-    primaryProvider: required('AI_PRIMARY_PROVIDER', 'openai'),
-    fallbackProviders: String(required('AI_FALLBACK_PROVIDERS', 'gemini,openrouter,claude,grok,experiential,litellm,freellmapi'))
+    primaryProvider: required('AI_PRIMARY_PROVIDER', null),
+    fallbackProviders: String(required('AI_FALLBACK_PROVIDERS', ''))
       .split(',')
       .map((p) => p.trim())
       .filter(Boolean),
