@@ -42,12 +42,12 @@ export class BackgroundJobManager {
     return this._schedule({ toolName, input, kind:'recurring', intervalMs, maxRunMs, runAt:new Date(Date.now()+intervalMs).toISOString() });
   }
   /** Create a task now and schedule its autonomous execution for later. */
-  async scheduleTask({ goal, executeAt, delayMs = 0, autonomyLevel, maxRunMs = DEFAULT_JOB_TIMEOUT_MS }) {
+  async scheduleTask({ goal, executeAt, delayMs = 0, autonomyLevel }) {
     if (!this.taskPlanner) throw new Error('Task scheduling is not configured');
     const task = await this.taskPlanner.plan(goal);
     const runAt = executeAt ? new Date(executeAt) : new Date(Date.now()+Math.max(0,delayMs));
     if (Number.isNaN(runAt.getTime())) throw new Error('Invalid executeAt date');
-    const job = this._schedule({ kind:'task', taskId:task.id, goal, maxRunMs, runAt:runAt.toISOString() });
+    const job = this._schedule({ kind:'task', taskId:task.id, goal, maxRunMs: this.taskPlanner.maxDurationMs ?? DEFAULT_JOB_TIMEOUT_MS, runAt:runAt.toISOString() });
     return { task, job };
   }
   _schedule({ toolName=null,input={},kind,intervalMs=null,taskId=null,goal=null,runAt,maxRunMs=DEFAULT_JOB_TIMEOUT_MS }) {
@@ -109,7 +109,7 @@ export class BackgroundJobManager {
       if(job.kind==='recurring') this._arm(this.get(jobId)); else {this._clearTimer(jobId);this.eventBus?.emitEvent(EventType.TASK_COMPLETED,{jobId,toolName:job.toolName,taskId:job.taskId});}
     } catch(err) {
       const attempts=(job.attempts||0)+1;
-      const timedOut = err?.code === 'BACKGROUND_JOB_TIMEOUT';
+      const timedOut = err?.code === 'BACKGROUND_JOB_TIMEOUT' || job.kind === 'task' && String(err?.message ?? '').includes('exceeded the maximum duration');
       const safeError = redactSensitive(err?.message ?? err);
       let incident = null;
       try {
@@ -117,13 +117,13 @@ export class BackgroundJobManager {
           source: timedOut ? 'background_job_timeout' : 'background_job',
           severity: timedOut || attempts > MAX_JOB_RETRIES ? 'error' : 'warning',
           correlationId: job.correlationId,
-          context: { jobId, kind: job.kind, toolName: job.toolName, taskId: job.taskId, attempt: attempts, maxRunMs: job.maxRunMs, idempotencyKey: job.id },
+          context: { jobId, kind: job.kind, toolName: job.toolName, taskId: job.taskId, attempt: attempts, maxRunMs: job.kind === 'task' ? this.taskPlanner?.maxDurationMs ?? null : job.maxRunMs, idempotencyKey: job.id },
         }) ?? null;
       } catch { /* a telemetry failure must not stop bounded retry handling */ }
       this.activityLog.log({type:timedOut?'background_job_timed_out':'background_job_failed',detail:{jobId,toolName:job.toolName,taskId:job.taskId,attempt:attempts,error:safeError,incidentId:incident?.id ?? null,correlationId:job.correlationId}});
       if (timedOut) {
         // A timeout leaves the external side-effect outcome uncertain. Do not retry blindly.
-        this._patch(jobId,j=>{j.status='timed_out';j.attempts=attempts;j.lastError=safeError;j.timeoutMs=job.maxRunMs;j.runAt=null;j.finishedAt=new Date().toISOString();j.updatedAt=j.finishedAt;});
+        this._patch(jobId,j=>{j.status='timed_out';j.attempts=attempts;j.lastError=safeError;j.timeoutMs=job.kind === 'task' ? this.taskPlanner?.maxDurationMs ?? job.maxRunMs : job.maxRunMs;j.runAt=null;j.finishedAt=new Date().toISOString();j.updatedAt=j.finishedAt;});
         this._clearTimer(jobId);
         this.eventBus?.emitEvent(EventType.TASK_FAILED,{jobId,toolName:job.toolName,taskId:job.taskId,error:safeError,reason:'timeout',incidentId:incident?.id ?? null,correlationId:job.correlationId});
       } else if(attempts<=MAX_JOB_RETRIES){
