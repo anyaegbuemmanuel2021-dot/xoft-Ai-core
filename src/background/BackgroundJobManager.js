@@ -111,7 +111,7 @@ export class BackgroundJobManager {
       if(job.kind==='recurring') this._arm(this.get(jobId)); else {this._clearTimer(jobId);this.eventBus?.emitEvent(EventType.TASK_COMPLETED,{jobId,toolName:job.toolName,taskId:job.taskId});}
     } catch(err) {
       const attempts=(job.attempts||0)+1;
-      const timedOut = err?.code === 'BACKGROUND_JOB_TIMEOUT' || job.kind === 'task' && String(err?.message ?? '').includes('exceeded the maximum duration');
+      const timedOut = err?.code === 'BACKGROUND_JOB_TIMEOUT' || err?.code === 'TASK_TIMEOUT' || job.kind === 'task' && String(err?.message ?? '').includes('exceeded the maximum duration');
       const safeError = redactSensitive(err?.message ?? err);
       let incident = null;
       try {
