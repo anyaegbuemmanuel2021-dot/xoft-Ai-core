@@ -1175,7 +1175,7 @@ app.get('/api/tasks', (_req, res) => {
   res.json(taskPlanner.list());
 });
 
-app.post('/api/tasks/:id/cancel', (req, res) => {
+app.post('/api/tasks/:id/cancel', requireAdmin, (req, res) => {
   try {
     res.json(taskPlanner.cancel(req.params.id));
   } catch (err) {
@@ -1203,7 +1203,7 @@ app.post('/api/tasks/:id/enqueue', (req, res) => {
   }
 });
 
-app.post('/api/tasks/:id/schedule', (req, res) => {
+app.post('/api/tasks/:id/schedule', requireAdmin, (req, res) => {
   const { at } = req.body ?? {};
   if (!at) return res.status(400).json({ error: 'at (ISO timestamp) is required' });
   try {
