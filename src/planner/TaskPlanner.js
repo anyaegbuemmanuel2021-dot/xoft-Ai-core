@@ -69,6 +69,7 @@ export class TaskPlanner {
     this.executionRecordStore = executionRecordStore ?? new ExecutionRecordStore({ dataDir, sqliteStore });
     this.experienceStore = experienceStore ?? new ExperienceStore({ dataDir, sqliteStore });
     this.maxDurationMs = Math.max(1000, Number(maxDurationMs ?? 15 * 60 * 1000));
+    this.activeControllers = new Map();
     this._store = new JsonStore({ dataDir, fileName: 'tasks.json', kvKey: 'tasks', defaultValue: { tasks: [] }, sqliteStore });
   }
 
@@ -198,6 +199,7 @@ export class TaskPlanner {
    * @param {string} taskId
    */
   async execute(taskId, { maxDurationMs, signal: externalSignal } = {}) {
+    if (this.activeControllers.has(taskId)) throw new Error(`TaskPlanner: task '${taskId}' is already running.`);
     const requestedMs = Number(maxDurationMs);
     const timeoutMs = Number.isFinite(requestedMs) && requestedMs > 0
       ? Math.min(this.maxDurationMs, requestedMs)
@@ -211,6 +213,7 @@ export class TaskPlanner {
     };
     if (externalSignal?.aborted) relayExternalAbort();
     else externalSignal?.addEventListener('abort', relayExternalAbort, { once: true });
+    this.activeControllers.set(taskId, controller);
     let timer;
     const work = this._executeTask(taskId, { signal: controller.signal });
     const cancellation = new Promise((_, reject) => {
@@ -241,6 +244,7 @@ export class TaskPlanner {
         this.activityLog.log({ type: 'task_timed_out', taskId, detail: { timeoutMs } });
         this.eventBus?.emitEvent(EventType.TASK_FAILED, { taskId, goal: task?.goal, reason: 'timeout' });
       } else if (err?.code === 'BACKGROUND_JOB_CANCELLED') {
+        const alreadyCancelled = task?.status === 'cancelled';
         const at = new Date().toISOString();
         const message = 'Execution was cancelled; external side-effect outcome may be uncertain.';
         this._updateTask(taskId, (t) => ({
@@ -249,13 +253,16 @@ export class TaskPlanner {
             ? { ...step, status: 'cancelled', error: message, ambiguousExecution: true }
             : ['pending', 'waiting_approval'].includes(step.status) ? { ...step, status: 'cancelled' } : step),
         }));
-        this.activityLog.log({ type: 'task_cancelled', taskId, detail: { sideEffectOutcomeUncertain: true } });
-        this.eventBus?.emitEvent(EventType.TASK_CANCELLED, { taskId, goal: task?.goal, sideEffectOutcomeUncertain: true });
+        if (!alreadyCancelled) {
+          this.activityLog.log({ type: 'task_cancelled', taskId, detail: { sideEffectOutcomeUncertain: true } });
+          this.eventBus?.emitEvent(EventType.TASK_CANCELLED, { taskId, goal: task?.goal, sideEffectOutcomeUncertain: true });
+        }
       }
       throw err;
     } finally {
       clearTimeout(timer);
       externalSignal?.removeEventListener('abort', relayExternalAbort);
+      if (this.activeControllers.get(taskId) === controller) this.activeControllers.delete(taskId);
     }
   }
 
@@ -616,14 +623,28 @@ export class TaskPlanner {
   }
 
   cancel(taskId) {
+    const current = this._getTask(taskId);
+    if (!current) throw new Error(`TaskPlanner: task '${taskId}' not found.`);
+    if (['completed', 'cancelled'].includes(current.status)) return current;
+    const controller = this.activeControllers.get(taskId);
+    const uncertain = Boolean(controller && current.status === 'running');
+    if (controller && !controller.signal.aborted) {
+      const error = new Error('Task cancellation requested by owner; external side-effect outcome may be uncertain.');
+      error.code = 'BACKGROUND_JOB_CANCELLED';
+      controller.abort(error);
+    }
+    const at = new Date().toISOString();
+    const message = 'Execution was cancelled; external side-effect outcome may be uncertain.';
     const task = this._updateTask(taskId, (t) => ({
       ...t,
       status: 'cancelled',
-      completedAt: t.completedAt ?? new Date().toISOString(),
-      steps: t.steps.map((s) => (s.status === 'pending' || s.status === 'waiting_approval' ? { ...s, status: 'cancelled' } : s)),
+      completedAt: t.completedAt ?? at,
+      steps: t.steps.map((step) => step.status === 'running'
+        ? { ...step, status: 'cancelled', error: message, ambiguousExecution: true }
+        : ['pending', 'waiting_approval'].includes(step.status) ? { ...step, status: 'cancelled' } : step),
     }));
-    this.activityLog.log({ type: 'task_cancelled', taskId });
-    this.eventBus?.emitEvent(EventType.TASK_CANCELLED, { taskId, goal: task.goal });
+    this.activityLog.log({ type: 'task_cancelled', taskId, detail: { sideEffectOutcomeUncertain: uncertain } });
+    this.eventBus?.emitEvent(EventType.TASK_CANCELLED, { taskId, goal: task.goal, sideEffectOutcomeUncertain: uncertain });
     return task;
   }
 
